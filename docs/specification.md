@@ -1,6 +1,6 @@
 # Product specification
 
-Status: confirmed requirements with explicitly marked open decisions. This document is the canonical product-level specification.
+Status: confirmed requirements with explicitly marked open decisions. This document is the canonical product-level specification. WP00 implementation decisions are recorded in ADR-0005.
 
 ## 1. Product definition
 
@@ -204,14 +204,14 @@ Unless separately approved, the first implementation should not include:
 
 These choices may be resolved by explicit implementation work packages or ADRs:
 
-- frontend framework and package manager;
 - Firebase Hosting versus another static hosting target;
 - exact Firestore collection names and indexing plan, provided the logical invariants remain intact;
 - exact sortable-order key representation;
 - whether navigation mode is global or configurable per item;
-- exact visual design tokens and icon catalog;
+- exact visual design tokens and icon catalog beyond the WP00 foundation;
 - exact server runtime for privileged functions;
+- schema-validation library for persisted and portable data;
 - exact cadence and operational tooling for cleanup;
 - whether demo-load history is retained after all derived items are removed.
 
-An agent must not infer these decisions from unrelated projects.
+The frontend stack, build tool, test runner, CSS approach, and routing approach were resolved by ADR-0005. An agent must not infer remaining decisions from unrelated projects.

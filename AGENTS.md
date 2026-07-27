@@ -8,22 +8,42 @@ Read these files in order:
 
 1. `README.md`
 2. `AGENTS.md`
-3. `docs/specification.md`
-4. `docs/architecture.md`
-5. `docs/data-model.md`
-6. `docs/authentication-and-authorization.md`
-7. `docs/import-export.md`
-8. `docs/demo-data.md`
-9. Relevant records in `docs/decisions/`
-10. `docs/roadmap.md`
+3. `docs/operations/google-ai-studio-workflow.md`
+4. `docs/specification.md`
+5. `docs/architecture.md`
+6. `docs/data-model.md`
+7. `docs/authentication-and-authorization.md`
+8. `docs/import-export.md`
+9. `docs/demo-data.md`
+10. Relevant records in `docs/decisions/`
+11. `docs/roadmap.md`
 
 Repository documentation is intended to be sufficient without prior conversational context. Do not rely on assumptions derived from other repositories.
 
 ## Current phase
 
-The repository is in the specification and architecture phase. **Do not implement the application, select a framework, initialize a package manager, connect a Firebase project, deploy resources, or create production data until an explicitly approved implementation work package says to do so.**
+The project is in incremental implementation controlled by explicitly approved work packages. WP00 — Project Bootstrap and Static Surface Skeleton — is implemented.
 
-Documentation improvements, consistency corrections, decision records, threat analysis, and testable interface contracts are permitted when requested.
+Do not implement a later feature, connect a Firebase project, deploy resources, create production data, or expand scope unless an explicitly approved implementation work package authorizes that exact work. A roadmap entry is not authorization.
+
+Documentation improvements, consistency corrections, decision records, threat analysis, code review, and testable interface contracts are permitted when requested.
+
+## Canonical repository and AI Studio constraint
+
+`TakashiSasaki/launcher-aistudio/main` is the operational source of truth.
+
+The earlier `TakashiSasaki/launcher` repository is retained as pre-implementation specification history. Do not treat it as an equal development source or synchronize both repositories bidirectionally.
+
+Google AI Studio can import and publish only `main`, and the application must remain runnable in its container. Follow the single-writer lease and handoff procedure in `docs/operations/google-ai-studio-workflow.md`.
+
+Outside Google AI Studio, every change must:
+
+1. start from the latest `main`;
+2. use a non-`main` work branch;
+3. be submitted as a draft pull request targeting `main`;
+4. remain unmerged until the repository owner decides to merge it.
+
+Do not merge or commit to `main` while an AI Studio workspace is actively based on an older `main`.
 
 ## Product invariants
 
@@ -51,6 +71,20 @@ Preserve all of the following unless an explicit architecture decision supersede
 - Provenance, ownership, ordering, and content are separate from identity.
 - The initial service worker is pass-through; application-managed caching is deferred.
 
+## Implemented stack invariants
+
+ADR-0005 selected the WP00 frontend foundation:
+
+- Vanilla TypeScript;
+- Vite;
+- Vitest;
+- plain CSS with CSS Grid;
+- no UI framework or CSS framework;
+- no third-party routing library;
+- npm-compatible package scripts that may be executed by Bun without using Bun-specific APIs.
+
+Do not replace this stack without a superseding accepted ADR and an approved work package.
+
 ## Change discipline
 
 - Treat the documentation as a coherent specification, not independent notes.
@@ -65,11 +99,17 @@ Preserve all of the following unless an explicit architecture decision supersede
 
 ## Branch and commit conventions
 
-Use English branch names in the form:
+Use English work-branch names in the form:
 
 `<type>/<short-description>`
 
-Allowed types are `feature`, `fix`, `chore`, `docs`, and `refactor`. Keep branch names under 50 characters when practical.
+Allowed work types are `feature`, `fix`, `chore`, `docs`, and `refactor`. Keep branch names under 50 characters when practical.
+
+Immutable checkpoint branches may use:
+
+`snapshot/<date>-<description>`
+
+Snapshot branches are not work branches, must not be submitted as implementation pull requests, and must not be moved after creation.
 
 Use focused commits. Do not mix implementation, schema changes, security-rule changes, and unrelated documentation cleanup without a documented reason.
 
@@ -82,7 +122,9 @@ Before declaring work complete:
 - Verify that authorization is enforced server-side or by Security Rules, not merely hidden in the UI.
 - Verify that destructive operations have explicit scope, validation, failure handling, and recovery semantics.
 - Verify migration and import/export completeness; completeness checking is mandatory, not optional.
-- Report what was verified and what could not be verified.
+- Report commands and checks actually run.
+- Report checks unavailable in the current environment instead of claiming success.
+- State whether Google AI Studio must perform a runtime follow-up before merge.
 
 ## Agent-specific files
 

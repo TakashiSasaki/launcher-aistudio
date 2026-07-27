@@ -4,6 +4,8 @@ Status: sequencing guidance only. A roadmap entry is not implementation authoriz
 
 ## Phase 0 — Specification closure
 
+Status: sufficiently complete to authorize scoped implementation work packages; documentation remains actively maintained.
+
 Goals:
 
 - maintain coherent product, architecture, data, authentication, import/export, demo, PWA, and security documentation;
@@ -20,20 +22,22 @@ Exit criteria:
 
 ## Phase 1 — Minimal static surfaces
 
-Potential scope after explicit approval:
+Status: implemented by WP00 — Project Bootstrap and Static Surface Skeleton.
 
-- select frontend language, framework, build tool, and package manager;
-- implement `/`, `/dev`, and static `/demo` using fixed local data;
-- implement responsive accessible icon grid;
-- create independently drawn lightweight color SVG icon primitives;
-- add route catalog/documentation;
-- add test and lint foundations.
+Implemented scope:
 
-Must not yet require Firebase production connectivity unless the work package includes it.
+- selected Vanilla TypeScript, Vite, npm-compatible package scripts, and Vitest;
+- implemented `/`, `/app`, `/admin`, `/dev`, and static `/demo` route surfaces;
+- implemented a responsive accessible icon grid with fixed local data;
+- created lightweight application-defined color SVG icon primitives;
+- added route, HTTPS-validation, UUIDv7-format, demo-data, and icon-safety tests;
+- added build, test, type-check, and development scripts.
+
+Firebase production connectivity remains outside WP00.
 
 ## Phase 2 — PWA baseline
 
-Potential scope:
+Potential scope after explicit approval:
 
 - minimal manifest;
 - application installation icons;
@@ -45,7 +49,7 @@ No custom application cache is introduced in this phase.
 
 ## Phase 3 — Authentication and user Firestore data
 
-Potential scope:
+Potential scope after explicit approval:
 
 - explicit Google/anonymous choice;
 - `/app` authentication guard;
@@ -58,7 +62,7 @@ Potential scope:
 
 ## Phase 4 — Demo persistence lifecycle
 
-Potential scope:
+Potential scope after explicit approval:
 
 - authenticated demo load into Firestore;
 - versioned fixed dataset;
@@ -69,7 +73,7 @@ Potential scope:
 
 ## Phase 5 — Import and export
 
-Potential scope:
+Potential scope after explicit approval:
 
 - versioned UTF-8 JSON export;
 - complete schema validation;
@@ -82,7 +86,7 @@ Both replace and merge are mandatory before this phase is complete.
 
 ## Phase 6 — Google linking and account merge
 
-Potential scope:
+Potential scope after explicit approval:
 
 - no-collision anonymous-to-Google linking;
 - existing-Google collision detection;
@@ -94,7 +98,7 @@ Potential scope:
 
 ## Phase 7 — Administration
 
-Potential scope:
+Potential scope after explicit approval:
 
 - administrator custom-claim bootstrap;
 - `/admin` interface;
@@ -106,7 +110,7 @@ Potential scope:
 
 ## Phase 8 — Anonymous-account cleanup
 
-Potential scope:
+Potential scope after explicit approval:
 
 - scheduled 183-day inactivity detection;
 - provider-state recheck;
@@ -117,7 +121,7 @@ Potential scope:
 
 ## Phase 9 — Caching and offline design
 
-Potential scope only after a separate ADR:
+Potential scope only after a separate ADR and explicit approval:
 
 - static asset caching;
 - navigation strategy;
@@ -138,5 +142,7 @@ Before an agent begins a phase, the requested work must state:
 - tests and verification commands;
 - whether Firebase emulator, staging, or production resources may be used;
 - whether deployment is permitted.
+
+For Google AI Studio work, the package must also state that AI Studio temporarily holds the `main` write lease described in `docs/operations/google-ai-studio-workflow.md`.
 
 Agents must not treat the entire roadmap as one task.
