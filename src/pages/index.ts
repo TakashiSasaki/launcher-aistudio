@@ -1,6 +1,10 @@
 import { renderLauncherGrid } from '../components/launcher-grid';
 import { demoData } from '../data/demo';
-import { getPwaStatus } from '../pwa/registration';
+import {
+  getPwaStatus,
+  PWA_STATUS_CHANGED_EVENT,
+  type PwaRegistrationState,
+} from '../pwa/registration';
 
 export function renderHomePage(): HTMLElement {
   const container = document.createElement('div');
@@ -42,20 +46,72 @@ export function renderAdminPage(): HTMLElement {
   return container;
 }
 
+function registrationStateLabel(state: PwaRegistrationState): string {
+  switch (state) {
+    case 'idle':
+      return 'Not checked';
+    case 'unsupported':
+      return 'Unsupported';
+    case 'disabled-in-development':
+      return 'Disabled in development';
+    case 'registering':
+      return 'Registering';
+    case 'registered':
+      return 'Registered';
+    case 'failed':
+      return 'Failed';
+  }
+}
+
+function setText(container: HTMLElement, selector: string, value: string): void {
+  const element = container.querySelector<HTMLElement>(selector);
+  if (element) {
+    element.textContent = value;
+  }
+}
+
+function updatePwaStatusDisplay(container: HTMLElement): void {
+  const status = getPwaStatus();
+
+  setText(container, '[data-pwa-state]', registrationStateLabel(status.state));
+  setText(container, '[data-pwa-supported]', status.supported ? 'Yes' : 'No');
+  setText(
+    container,
+    '[data-pwa-disabled-in-dev]',
+    status.disabledInDev ? 'Yes' : 'No',
+  );
+  setText(container, '[data-pwa-registered]', status.registered ? 'Yes' : 'No');
+
+  const errorItem = container.querySelector<HTMLElement>('[data-pwa-error-item]');
+  const errorText = container.querySelector<HTMLElement>('[data-pwa-error]');
+  if (errorItem && errorText) {
+    errorItem.hidden = !status.error;
+    errorText.textContent = status.error ?? '';
+  }
+}
+
+function detectDisplayMode(): string {
+  if (!window.matchMedia) {
+    return 'browser';
+  }
+
+  if (window.matchMedia('(display-mode: standalone)').matches) {
+    return 'standalone';
+  }
+  if (window.matchMedia('(display-mode: minimal-ui)').matches) {
+    return 'minimal-ui';
+  }
+  if (window.matchMedia('(display-mode: fullscreen)').matches) {
+    return 'fullscreen';
+  }
+
+  return 'browser';
+}
+
 export function renderDevPage(): HTMLElement {
   const container = document.createElement('div');
   container.className = 'container';
-  const pwaStatus = getPwaStatus();
-  
-  // Try to detect display mode
-  let displayMode = 'browser';
-  if (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) {
-    displayMode = 'standalone';
-  } else if (window.matchMedia && window.matchMedia('(display-mode: minimal-ui)').matches) {
-    displayMode = 'minimal-ui';
-  } else if (window.matchMedia && window.matchMedia('(display-mode: fullscreen)').matches) {
-    displayMode = 'fullscreen';
-  }
+  const displayMode = detectDisplayMode();
 
   container.innerHTML = `
     <h1>Developer Info</h1>
@@ -68,12 +124,13 @@ export function renderDevPage(): HTMLElement {
     </ul>
     <h2>PWA Status</h2>
     <ul>
-      <li>Manifest URL: <a href="/manifest.json" target="_blank">/manifest.json</a></li>
+      <li>Manifest URL: <a href="/manifest.json" target="_blank" rel="noopener noreferrer">/manifest.json</a></li>
       <li>Display Mode: ${displayMode}</li>
-      <li>Service Worker Supported: ${pwaStatus.supported ? 'Yes' : 'No'}</li>
-      <li>Service Worker Disabled in Dev: ${pwaStatus.disabledInDev ? 'Yes' : 'No'}</li>
-      <li>Service Worker Registered: ${pwaStatus.registered ? 'Yes' : 'No'}</li>
-      ${pwaStatus.error ? `<li>Service Worker Error: ${pwaStatus.error}</li>` : ''}
+      <li>Service Worker State: <span data-pwa-state></span></li>
+      <li>Service Worker Supported: <span data-pwa-supported></span></li>
+      <li>Service Worker Disabled in Dev: <span data-pwa-disabled-in-dev></span></li>
+      <li>Service Worker Registered: <span data-pwa-registered></span></li>
+      <li data-pwa-error-item hidden>Service Worker Error: <span data-pwa-error></span></li>
       <li>Application Version: <em>Deferred</em></li>
       <li><strong>Note:</strong> Application-managed caching and offline behavior are not implemented in this baseline.</li>
     </ul>
@@ -87,6 +144,21 @@ export function renderDevPage(): HTMLElement {
     </ul>
     <div style="margin-top: 20px;"><a href="/" data-link>&larr; Back to Home</a></div>
   `;
+
+  updatePwaStatusDisplay(container);
+
+  const initialState = getPwaStatus().state;
+  if (initialState === 'idle' || initialState === 'registering') {
+    const handleStatusChange = (): void => {
+      updatePwaStatusDisplay(container);
+      const currentState = getPwaStatus().state;
+      if (currentState !== 'idle' && currentState !== 'registering') {
+        window.removeEventListener(PWA_STATUS_CHANGED_EVENT, handleStatusChange);
+      }
+    };
+    window.addEventListener(PWA_STATUS_CHANGED_EVENT, handleStatusChange);
+  }
+
   return container;
 }
 
@@ -99,7 +171,7 @@ export function renderDemoPage(): HTMLElement {
     <div id="demo-grid-container"></div>
     <div style="margin-top: 20px;"><a href="/" data-link>&larr; Back to Home</a></div>
   `;
-  
+
   const gridContainer = container.querySelector('#demo-grid-container');
   if (gridContainer) {
     gridContainer.appendChild(renderLauncherGrid(demoData));

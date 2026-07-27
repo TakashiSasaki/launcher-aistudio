@@ -1,27 +1,57 @@
-import { describe, it, expect, vi } from 'vitest';
-// @ts-ignore
+import { beforeAll, describe, expect, it, vi } from 'vitest';
+// @ts-ignore Node.js types are intentionally not yet part of the browser-focused project.
 import * as fs from 'fs';
-// @ts-ignore
+// @ts-ignore Node.js types are intentionally not yet part of the browser-focused project.
 import * as path from 'path';
-import { registerServiceWorker, getPwaStatus } from '../pwa/registration';
+import {
+  PWA_STATUS_CHANGED_EVENT,
+  registerServiceWorker,
+} from '../pwa/registration';
 import { renderDevPage } from '../pages/index';
 
-// @ts-ignore
+interface ManifestIcon {
+  src: string;
+  sizes: string;
+  type: string;
+  purpose: string;
+}
+
+interface LauncherManifest {
+  id: string;
+  name: string;
+  short_name: string;
+  start_url: string;
+  scope: string;
+  display: string;
+  icons: ManifestIcon[];
+}
+
+// @ts-ignore __dirname is provided by the Vitest runtime for this test module.
 const ROOT_DIR = path.resolve(__dirname, '../../');
 const PUBLIC_DIR = path.join(ROOT_DIR, 'public');
 
+function mockServiceWorkerContainer(
+  register: ReturnType<typeof vi.fn>,
+): Pick<ServiceWorkerContainer, 'register'> {
+  return { register } as unknown as Pick<ServiceWorkerContainer, 'register'>;
+}
+
 describe('PWA Manifest', () => {
   const manifestPath = path.join(PUBLIC_DIR, 'manifest.json');
-  let manifest: any;
+  let manifest: LauncherManifest;
 
-  it('manifest exists and parses as valid JSON', () => {
+  beforeAll(() => {
     expect(fs.existsSync(manifestPath)).toBe(true);
     const content = fs.readFileSync(manifestPath, 'utf-8');
-    manifest = JSON.parse(content);
+    manifest = JSON.parse(content) as LauncherManifest;
+  });
+
+  it('exists and parses as valid JSON', () => {
     expect(manifest).toBeDefined();
   });
 
   it('contains required fields and values', () => {
+    expect(manifest.id).toBe('/');
     expect(manifest.start_url).toBe('/app');
     expect(manifest.scope).toBe('/');
     expect(manifest.name).toBe('Launcher');
@@ -35,27 +65,30 @@ describe('PWA Manifest', () => {
     for (const icon of manifest.icons) {
       expect(icon.src).toMatch(/^\/icons\/icon-/);
       expect(icon.type).toBe('image/png');
+      expect(['any', 'maskable']).toContain(icon.purpose);
     }
   });
 
-  it('icons physically exist and have valid PNG signatures', () => {
+  it('declared icons physically exist and have valid PNG dimensions', () => {
     for (const icon of manifest.icons) {
-      // Remove leading slash
       const iconPath = path.join(PUBLIC_DIR, icon.src.slice(1));
       expect(fs.existsSync(iconPath)).toBe(true);
 
       const buffer = fs.readFileSync(iconPath);
-      // PNG magic number: 89 50 4e 47 0d 0a 1a 0a
-      expect(buffer[0]).toBe(0x89);
-      expect(buffer[1]).toBe(0x50);
-      expect(buffer[2]).toBe(0x4E);
-      expect(buffer[3]).toBe(0x47);
+      expect(Array.from(buffer.subarray(0, 8))).toEqual([
+        0x89,
+        0x50,
+        0x4e,
+        0x47,
+        0x0d,
+        0x0a,
+        0x1a,
+        0x0a,
+      ]);
 
-      // Verify dimensions (IHDR chunk is immediately after signature)
-      // IHDR is at offset 12, width is 16-19, height is 20-23
       const width = buffer.readUInt32BE(16);
       const height = buffer.readUInt32BE(20);
-      const expectedSize = parseInt(icon.sizes.split('x')[0], 10);
+      const expectedSize = Number.parseInt(icon.sizes.split('x')[0], 10);
       expect(width).toBe(expectedSize);
       expect(height).toBe(expectedSize);
     }
@@ -65,58 +98,82 @@ describe('PWA Manifest', () => {
 describe('Service Worker', () => {
   const swPath = path.join(PUBLIC_DIR, 'sw.js');
 
-  it('sw.js exists physically', () => {
+  it('exists physically and does not use Cache Storage or fetch events', () => {
     expect(fs.existsSync(swPath)).toBe(true);
-  });
-
-  it('does not use Cache Storage or fetch events', () => {
     const swContent = fs.readFileSync(swPath, 'utf-8');
     expect(swContent).not.toMatch(/caches/i);
     expect(swContent).not.toMatch(/addEventListener\(['"]fetch['"]/i);
   });
 
-  it('registration fails safely without throwing exceptions if navigator.serviceWorker is missing', async () => {
-    // navigator is not defined in jsdom normally without setup, or it has no serviceWorker
-    // @ts-ignore
-    const originalNavigator = global.navigator;
-    // @ts-ignore
-    global.navigator = {} as any;
-    
-    await expect(registerServiceWorker()).resolves.toBeUndefined();
-    expect(getPwaStatus().supported).toBe(false);
+  it('reports unsupported browsers without throwing', async () => {
+    const result = await registerServiceWorker({
+      isDevelopment: false,
+      serviceWorker: null,
+      eventTarget: new EventTarget(),
+    });
 
-    // @ts-ignore
-    global.navigator = originalNavigator;
+    expect(result.state).toBe('unsupported');
+    expect(result.supported).toBe(false);
+    expect(result.registered).toBe(false);
   });
-  
-  it('registration handles rejection safely', async () => {
-    // @ts-ignore
-    const originalNavigator = global.navigator;
-    // @ts-ignore
-    global.navigator = {
-      serviceWorker: {
-        register: vi.fn().mockRejectedValue(new Error('Test rejection'))
-      }
-    } as any;
-    
-    // We also need to mock import.meta.env.DEV which is hard, but Vitest might have it.
-    // In Vitest, DEV is true by default. Let's spy on it if we could, but Vitest replaces it at build.
-    // Actually we will test disabledInDev in the next test. If it returns early, we need to bypass it.
-    
-    // Instead of testing import.meta.env.DEV mocking here (which requires vite config tricks), 
-    // we'll just check that DEV prevents registration.
-    
-    // @ts-ignore
-    global.navigator = originalNavigator;
+
+  it('does not attempt registration during development', async () => {
+    const register = vi.fn();
+    const result = await registerServiceWorker({
+      isDevelopment: true,
+      serviceWorker: mockServiceWorkerContainer(register),
+      eventTarget: new EventTarget(),
+    });
+
+    expect(register).not.toHaveBeenCalled();
+    expect(result.state).toBe('disabled-in-development');
+    expect(result.supported).toBe(true);
+    expect(result.disabledInDev).toBe(true);
+  });
+
+  it('reports successful production registration', async () => {
+    const register = vi
+      .fn()
+      .mockResolvedValue({} as ServiceWorkerRegistration);
+    const eventTarget = new EventTarget();
+    const statusListener = vi.fn();
+    eventTarget.addEventListener(PWA_STATUS_CHANGED_EVENT, statusListener);
+
+    const result = await registerServiceWorker({
+      isDevelopment: false,
+      serviceWorker: mockServiceWorkerContainer(register),
+      eventTarget,
+    });
+
+    expect(register).toHaveBeenCalledWith('/sw.js');
+    expect(result.state).toBe('registered');
+    expect(result.registered).toBe(true);
+    expect(statusListener).toHaveBeenCalledTimes(2);
+  });
+
+  it('handles production registration rejection without throwing', async () => {
+    const register = vi.fn().mockRejectedValue(new Error('Test rejection'));
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const result = await registerServiceWorker({
+      isDevelopment: false,
+      serviceWorker: mockServiceWorkerContainer(register),
+      eventTarget: new EventTarget(),
+    });
+
+    expect(result.state).toBe('failed');
+    expect(result.registered).toBe(false);
+    expect(result.error).toBe('Test rejection');
+    expect(consoleError).toHaveBeenCalled();
+    consoleError.mockRestore();
   });
 });
 
 describe('Dev Page PWA Status', () => {
-  it('renders PWA status section', () => {
-    // JSDOM setup for window.matchMedia
+  beforeAll(() => {
     Object.defineProperty(window, 'matchMedia', {
       writable: true,
-      value: vi.fn().mockImplementation(query => ({
+      value: vi.fn().mockImplementation((query: string) => ({
         matches: false,
         media: query,
         onchange: null,
@@ -127,14 +184,72 @@ describe('Dev Page PWA Status', () => {
         dispatchEvent: vi.fn(),
       })),
     });
+  });
 
-    const el = renderDevPage();
-    const html = el.innerHTML;
-    
-    expect(html).toContain('<h2>PWA Status</h2>');
-    expect(html).toContain('Manifest URL');
-    expect(html).toContain('Service Worker Supported');
-    expect(html).toContain('Service Worker Disabled in Dev');
-    expect(html).toContain('Application-managed caching and offline behavior are not implemented');
+  it('renders the required PWA status fields', async () => {
+    await registerServiceWorker({
+      isDevelopment: true,
+      serviceWorker: mockServiceWorkerContainer(vi.fn()),
+      eventTarget: new EventTarget(),
+    });
+
+    const element = renderDevPage();
+
+    expect(element.innerHTML).toContain('<h2>PWA Status</h2>');
+    expect(element.textContent).toContain('Manifest URL');
+    expect(element.textContent).toContain('Service Worker State');
+    expect(element.textContent).toContain('Disabled in development');
+    expect(element.textContent).toContain(
+      'Application-managed caching and offline behavior are not implemented',
+    );
+  });
+
+  it('updates a directly rendered page after asynchronous registration completes', async () => {
+    let resolveRegistration: ((value: ServiceWorkerRegistration) => void) | undefined;
+    const pendingRegistration = new Promise<ServiceWorkerRegistration>((resolve) => {
+      resolveRegistration = resolve;
+    });
+    const register = vi.fn().mockReturnValue(pendingRegistration);
+
+    const registrationPromise = registerServiceWorker({
+      isDevelopment: false,
+      serviceWorker: mockServiceWorkerContainer(register),
+      eventTarget: window,
+    });
+    const element = renderDevPage();
+
+    expect(element.querySelector('[data-pwa-state]')?.textContent).toBe(
+      'Registering',
+    );
+
+    resolveRegistration?.({} as ServiceWorkerRegistration);
+    await registrationPromise;
+
+    expect(element.querySelector('[data-pwa-state]')?.textContent).toBe(
+      'Registered',
+    );
+    expect(element.querySelector('[data-pwa-registered]')?.textContent).toBe(
+      'Yes',
+    );
+  });
+
+  it('renders registration errors as text rather than markup', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const register = vi
+      .fn()
+      .mockRejectedValue(new Error('<img src=x onerror=alert(1)>'));
+
+    await registerServiceWorker({
+      isDevelopment: false,
+      serviceWorker: mockServiceWorkerContainer(register),
+      eventTarget: new EventTarget(),
+    });
+
+    const element = renderDevPage();
+    const errorElement = element.querySelector<HTMLElement>('[data-pwa-error]');
+
+    expect(errorElement?.textContent).toBe('<img src=x onerror=alert(1)>');
+    expect(errorElement?.querySelector('img')).toBeNull();
+    consoleError.mockRestore();
   });
 });
