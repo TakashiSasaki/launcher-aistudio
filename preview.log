@@ -1,9 +1,0 @@
-
-> launcher-pwa@0.0.0 preview
-> vite preview --port 3000 --host 0.0.0.0
-
-Port 3000 is in use, trying another one...
-  ➜  Local:   http://localhost:3001/
-  ➜  Network: http://169.254.8.1:3001/
-  ➜  Network: http://169.254.9.1:3001/
-  ➜  Network: http://169.254.169.1:3001/

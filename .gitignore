@@ -17,7 +17,7 @@ firebase-debug.log*
 firestore-debug.log*
 ui-debug.log*
 
-# Dependencies and build output
+# Dependencies, build output, and local runtime logs
 node_modules/
 dist/
 build/
@@ -25,6 +25,8 @@ coverage/
 .cache/
 .tmp/
 tmp/
+*.log
+*.log.*
 
 # Local editor and operating-system files
 .vscode/
