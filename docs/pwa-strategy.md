@@ -1,6 +1,6 @@
 # PWA strategy
 
-Status: phased strategy; only the baseline is confirmed for the first implementation.
+Status: WP01 implemented the PWA baseline. Advanced caching and offline persistence remain deferred.
 
 ## Baseline milestone
 

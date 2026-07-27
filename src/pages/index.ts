@@ -1,5 +1,6 @@
 import { renderLauncherGrid } from '../components/launcher-grid';
 import { demoData } from '../data/demo';
+import { getPwaStatus } from '../pwa/registration';
 
 export function renderHomePage(): HTMLElement {
   const container = document.createElement('div');
@@ -44,6 +45,18 @@ export function renderAdminPage(): HTMLElement {
 export function renderDevPage(): HTMLElement {
   const container = document.createElement('div');
   container.className = 'container';
+  const pwaStatus = getPwaStatus();
+  
+  // Try to detect display mode
+  let displayMode = 'browser';
+  if (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) {
+    displayMode = 'standalone';
+  } else if (window.matchMedia && window.matchMedia('(display-mode: minimal-ui)').matches) {
+    displayMode = 'minimal-ui';
+  } else if (window.matchMedia && window.matchMedia('(display-mode: fullscreen)').matches) {
+    displayMode = 'fullscreen';
+  }
+
   container.innerHTML = `
     <h1>Developer Info</h1>
     <p><strong>Purpose:</strong> Lightweight, mobile-first PWA web launcher.</p>
@@ -52,6 +65,17 @@ export function renderDevPage(): HTMLElement {
       <li>Firebase Authentication: Not Implemented</li>
       <li>Firestore Access: Not Implemented</li>
       <li>Persistent Demo: Not Implemented</li>
+    </ul>
+    <h2>PWA Status</h2>
+    <ul>
+      <li>Manifest URL: <a href="/manifest.json" target="_blank">/manifest.json</a></li>
+      <li>Display Mode: ${displayMode}</li>
+      <li>Service Worker Supported: ${pwaStatus.supported ? 'Yes' : 'No'}</li>
+      <li>Service Worker Disabled in Dev: ${pwaStatus.disabledInDev ? 'Yes' : 'No'}</li>
+      <li>Service Worker Registered: ${pwaStatus.registered ? 'Yes' : 'No'}</li>
+      ${pwaStatus.error ? `<li>Service Worker Error: ${pwaStatus.error}</li>` : ''}
+      <li>Application Version: <em>Deferred</em></li>
+      <li><strong>Note:</strong> Application-managed caching and offline behavior are not implemented in this baseline.</li>
     </ul>
     <h2>Route Catalog</h2>
     <ul>

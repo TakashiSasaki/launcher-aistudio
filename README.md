@@ -69,11 +69,12 @@ All non-AI-Studio changes must start from the latest `main`, use a work branch, 
 
 ## Current status
 
-**WP00 — Project Bootstrap and Static Surface Skeleton** has been implemented.
+**WP00 — Project Bootstrap and Static Surface Skeleton** and **WP01 — PWA Baseline** have been implemented.
 
 ### Implementation notes
 
 - **Technology stack**: Vanilla TypeScript with Vite and Vitest. No UI frameworks or external CSS libraries are used. Routing is handled by a custom lightweight History API router. See [ADR-0005](docs/decisions/0005-vanilla-ts-vite-stack.md).
+- **PWA Baseline**: A web app manifest and pass-through service worker are included for basic installation. See [ADR-0007](docs/decisions/0007-pwa-baseline-design.md).
 - **Installation**: Run `npm install` to install dependencies.
 - **Development**: Run `npm run dev` to start the local Vite development server.
 - **Build**: Run `npm run build` to create a production build in the `dist` directory.

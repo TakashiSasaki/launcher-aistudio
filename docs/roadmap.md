@@ -37,13 +37,15 @@ Firebase production connectivity remains outside WP00.
 
 ## Phase 2 — PWA baseline
 
-Potential scope after explicit approval:
+Status: implemented by WP01 — PWA Baseline.
 
-- minimal manifest;
-- application installation icons;
-- pass-through service worker;
-- direct-route hosting fallback;
-- installed-mode and ordinary-browser smoke testing.
+Implemented scope:
+
+- minimal manifest with `/app` start URL and `/` scope;
+- independently drawn application installation icons;
+- pass-through service worker registered in production;
+- direct-route Vite fallback verified in development and preview;
+- automated tests for manifest, icons, and service worker constraints.
 
 No custom application cache is introduced in this phase.
 
