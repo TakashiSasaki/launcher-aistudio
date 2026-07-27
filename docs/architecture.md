@@ -1,6 +1,6 @@
 # Architecture
 
-Status: logical architecture. Technology selection remains intentionally incomplete.
+Status: logical architecture with the WP00 frontend foundation selected and implemented. Firebase and privileged-backend technology choices remain incomplete.
 
 ## System context
 
@@ -29,6 +29,21 @@ Browser / installed PWA
               ├─ privileged import/export and repair
               └─ audit recording
 ```
+
+## Implemented client foundation
+
+ADR-0005 selected and WP00 implemented:
+
+- Vanilla TypeScript application code;
+- Vite development and production build tooling;
+- Vitest unit tests;
+- plain CSS with CSS Grid;
+- a lightweight native History API router;
+- no UI framework, CSS framework, component library, or third-party routing library.
+
+The package scripts are npm-compatible and may be executed by Bun in Google AI Studio, but application code must not depend on Bun-specific APIs without a later accepted decision.
+
+This implementation does not yet imply Firebase connectivity, PWA caching, production hosting, or privileged backend selection.
 
 ## Trust boundaries
 
@@ -169,15 +184,14 @@ Status records must avoid storing secrets or full user payloads.
 
 ## Deferred technology choices
 
-The repository does not yet select:
+The repository has selected the frontend language, build tool, router approach, CSS approach, UUIDv7 package, and test runner for WP00. It has not yet selected:
 
-- React, Vue, Svelte, or another UI framework;
-- TypeScript versus another implementation language;
-- Vite or another build system;
-- Firebase Hosting or alternative hosting;
+- Firebase Hosting versus another production hosting target;
 - Cloud Functions runtime and generation;
-- schema-validation library;
-- UUIDv7 library;
-- test runner.
+- schema-validation library for persistent and portable data;
+- Firebase project structure and environment separation;
+- Firestore emulator, staging, and production deployment workflow;
+- service-worker caching implementation;
+- observability and scheduled-job tooling.
 
-These decisions must be made deliberately in an implementation work package, with bundle size, browser support, Firebase integration, testability, and maintainability considered.
+These decisions must be made deliberately in approved implementation work packages and, where material, accepted ADRs. Bundle size, browser support, Firebase integration, testability, operational safety, and maintainability must be considered.
