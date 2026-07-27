@@ -57,10 +57,16 @@ export async function registerServiceWorker(
     options,
     'serviceWorker',
   );
+  const hasInjectedEventTarget = Object.prototype.hasOwnProperty.call(
+    options,
+    'eventTarget',
+  );
   const serviceWorker = hasInjectedServiceWorker
     ? options.serviceWorker ?? null
     : detectedServiceWorker();
-  const eventTarget = options.eventTarget ?? detectedEventTarget();
+  const eventTarget = hasInjectedEventTarget
+    ? options.eventTarget ?? null
+    : detectedEventTarget();
   const isDevelopment = options.isDevelopment ?? import.meta.env.DEV;
 
   if (!serviceWorker) {
