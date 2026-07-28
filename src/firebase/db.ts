@@ -1,98 +1,174 @@
-import { db, appConfig } from './config';
-import { doc, getDoc, setDoc, updateDoc, collection, query, orderBy, onSnapshot, serverTimestamp, deleteDoc } from 'firebase/firestore';
-import { LauncherItem } from '../types/launcher';
-import { generateItemId } from '../utils/uuid';
 import { User } from 'firebase/auth';
+import {
+  Timestamp,
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
+  writeBatch,
+} from 'firebase/firestore';
+import { appConfig, db } from './config';
+import {
+  LauncherItem,
+  LauncherItemUpdates,
+  NewLauncherItem,
+} from '../types/launcher';
+import { generateItemId } from '../utils/uuid';
 
 const USERS_COLLECTION = 'users';
+const ACTIVITY_UPDATE_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
-export async function createOrUpdateProfile(user: User) {
-  if (appConfig.mode === 'unconfigured' || !db) return;
-  
+function accountTypeForUser(user: User): 'anonymous' | 'google.com' {
+  return user.isAnonymous ? 'anonymous' : 'google.com';
+}
+
+function timestampMillis(value: unknown): number | null {
+  if (value instanceof Timestamp) {
+    return value.toMillis();
+  }
+
+  if (
+    typeof value === 'object' &&
+    value !== null &&
+    'toMillis' in value &&
+    typeof value.toMillis === 'function'
+  ) {
+    return value.toMillis();
+  }
+
+  return null;
+}
+
+export async function createOrUpdateProfile(user: User): Promise<void> {
+  if (appConfig.mode === 'unconfigured' || !db) {
+    throw new Error('Cloud Firestore is not configured.');
+  }
+
   const userRef = doc(db, USERS_COLLECTION, user.uid);
-  try {
-    const snap = await getDoc(userRef);
-    const now = Date.now();
-    
-    if (!snap.exists()) {
-      const accountType = user.isAnonymous ? 'anonymous' : 'google.com';
-      await setDoc(userRef, {
-        schemaVersion: 1,
-        accountType,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        lastActiveAt: serverTimestamp()
-      });
-      sessionStorage.setItem(`lastActiveAt_${user.uid}`, String(now));
-    } else {
-      const lastActiveStr = sessionStorage.getItem(`lastActiveAt_${user.uid}`);
-      const lastActive = lastActiveStr ? parseInt(lastActiveStr, 10) : 0;
-      
-      // Update at most once per 24 hours (86400000 ms)
-      if (now - lastActive > 86400000) {
-        await updateDoc(userRef, {
-          updatedAt: serverTimestamp(),
-          lastActiveAt: serverTimestamp()
-        });
-        sessionStorage.setItem(`lastActiveAt_${user.uid}`, String(now));
-      }
-    }
-  } catch (error) {
-    console.error('Profile update failed:', error);
+  const snap = await getDoc(userRef);
+  const accountType = accountTypeForUser(user);
+
+  if (!snap.exists()) {
+    await setDoc(userRef, {
+      schemaVersion: 1,
+      accountType,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      lastActiveAt: serverTimestamp(),
+    });
+    return;
+  }
+
+  const data = snap.data();
+  const lastActiveAt = timestampMillis(data.lastActiveAt);
+  const activityUpdateDue =
+    lastActiveAt === null || Date.now() - lastActiveAt >= ACTIVITY_UPDATE_INTERVAL_MS;
+  const accountTypeNeedsCorrection = data.accountType !== accountType;
+
+  if (activityUpdateDue || accountTypeNeedsCorrection) {
+    await updateDoc(userRef, {
+      accountType,
+      updatedAt: serverTimestamp(),
+      lastActiveAt: serverTimestamp(),
+    });
   }
 }
 
-export function subscribeToLauncherItems(uid: string, callback: (items: LauncherItem[]) => void) {
+export function subscribeToLauncherItems(
+  uid: string,
+  callback: (items: LauncherItem[]) => void,
+  onError?: (error: Error) => void,
+) {
   if (appConfig.mode === 'unconfigured' || !db) {
     callback([]);
-    return () => {};
+    return () => undefined;
   }
-  
+
   const itemsRef = collection(db, USERS_COLLECTION, uid, 'launcherItems');
-  const q = query(itemsRef, orderBy('sortKey'));
-  
-  return onSnapshot(q, (snapshot) => {
-    const items: LauncherItem[] = [];
-    snapshot.forEach(docSnap => {
-      items.push(docSnap.data() as LauncherItem);
-    });
-    callback(items);
-  }, (error) => {
-    console.error('Error fetching items:', error);
-    callback([]);
-  });
+  const itemsQuery = query(itemsRef, orderBy('sortKey'));
+
+  return onSnapshot(
+    itemsQuery,
+    (snapshot) => {
+      callback(snapshot.docs.map((itemDoc) => itemDoc.data() as LauncherItem));
+    },
+    (error) => {
+      onError?.(error);
+    },
+  );
 }
 
-export async function addLauncherItem(uid: string, item: Omit<LauncherItem, 'itemId' | 'createdAt' | 'updatedAt' | 'demoManaged' | 'origin'>) {
-  if (!db) return;
+export async function addLauncherItem(uid: string, item: NewLauncherItem): Promise<void> {
+  if (!db) {
+    throw new Error('Cloud Firestore is not configured.');
+  }
+
   const itemId = generateItemId();
   const itemRef = doc(db, USERS_COLLECTION, uid, 'launcherItems', itemId);
-  
-  const fullItem = {
+
+  await setDoc(itemRef, {
     ...item,
     schemaVersion: 1,
     itemId,
     demoManaged: false,
     origin: { type: 'user' },
     createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp()
-  };
-  
-  await setDoc(itemRef, fullItem);
-}
-
-export async function updateLauncherItem(uid: string, itemId: string, updates: Partial<Omit<LauncherItem, 'itemId' | 'createdAt' | 'origin' | 'demoManaged' | 'schemaVersion'>>) {
-  if (!db) return;
-  const itemRef = doc(db, USERS_COLLECTION, uid, 'launcherItems', itemId);
-  
-  await updateDoc(itemRef, {
-    ...updates,
-    updatedAt: serverTimestamp()
+    updatedAt: serverTimestamp(),
   });
 }
 
-export async function deleteLauncherItem(uid: string, itemId: string) {
-  if (!db) return;
+export async function updateLauncherItem(
+  uid: string,
+  itemId: string,
+  updates: LauncherItemUpdates,
+): Promise<void> {
+  if (!db) {
+    throw new Error('Cloud Firestore is not configured.');
+  }
+
+  const itemRef = doc(db, USERS_COLLECTION, uid, 'launcherItems', itemId);
+  await updateDoc(itemRef, {
+    ...updates,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+export async function swapLauncherItemSortKeys(
+  uid: string,
+  first: Pick<LauncherItem, 'itemId' | 'sortKey'>,
+  second: Pick<LauncherItem, 'itemId' | 'sortKey'>,
+): Promise<void> {
+  if (!db) {
+    throw new Error('Cloud Firestore is not configured.');
+  }
+
+  const batch = writeBatch(db);
+  const firstRef = doc(db, USERS_COLLECTION, uid, 'launcherItems', first.itemId);
+  const secondRef = doc(db, USERS_COLLECTION, uid, 'launcherItems', second.itemId);
+
+  batch.update(firstRef, {
+    sortKey: second.sortKey,
+    updatedAt: serverTimestamp(),
+  });
+  batch.update(secondRef, {
+    sortKey: first.sortKey,
+    updatedAt: serverTimestamp(),
+  });
+
+  await batch.commit();
+}
+
+export async function deleteLauncherItem(uid: string, itemId: string): Promise<void> {
+  if (!db) {
+    throw new Error('Cloud Firestore is not configured.');
+  }
+
   const itemRef = doc(db, USERS_COLLECTION, uid, 'launcherItems', itemId);
   await deleteDoc(itemRef);
 }
