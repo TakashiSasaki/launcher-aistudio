@@ -4,6 +4,8 @@ Status: binding operational instructions.
 
 This document defines the minimum repository-cleanliness checks required before a coding agent publishes work. It applies equally to Google AI Studio, Codex, Gemini, Claude, GitHub Copilot, Jules, and other agents.
 
+Use [`repository-hygiene-checklist.md`](repository-hygiene-checklist.md) immediately before publication.
+
 ## Purpose
 
 The repository must contain durable source code, configuration, tests, documentation, and intentionally maintained assets only. Files created merely to help an agent edit, inspect, test, patch, or report must not become project artifacts unless the approved work package explicitly requires them.
