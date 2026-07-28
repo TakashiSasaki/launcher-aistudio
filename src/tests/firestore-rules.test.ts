@@ -23,7 +23,7 @@ let testEnv: RulesTestEnvironment;
 
 beforeAll(async () => {
   testEnv = await initializeTestEnvironment({
-    projectId: 'launcher-local-test',
+    projectId: 'launcher-local',
     firestore: {
       rules: fs.readFileSync('firestore.rules', 'utf8'),
       host: '127.0.0.1',
