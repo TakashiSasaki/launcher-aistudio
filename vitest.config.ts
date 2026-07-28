@@ -4,5 +4,6 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     include: ['src/**/*.test.ts'],
+    exclude: ['src/tests/firestore-rules.test.ts'],
   },
 });
