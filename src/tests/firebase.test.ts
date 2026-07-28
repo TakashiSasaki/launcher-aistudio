@@ -5,6 +5,10 @@ import {
 } from '../firebase/config';
 import { isValidHttpsUrl } from '../types/launcher';
 import {
+  ACTIVITY_UPDATE_INTERVAL_MS,
+  isActivityUpdateDue,
+} from '../utils/activity';
+import {
   formatSortKey,
   isValidSortKey,
   nextSortKey,
@@ -39,6 +43,22 @@ describe('Firebase configuration', () => {
     expect(parseEmulatorPort('8080', 9999)).toBe(8080);
     expect(parseEmulatorPort('invalid', 9999)).toBe(9999);
     expect(parseEmulatorPort('70000', 9999)).toBe(9999);
+  });
+});
+
+describe('Activity throttling', () => {
+  const now = 2 * ACTIVITY_UPDATE_INTERVAL_MS;
+
+  it('updates profiles with no usable stored activity timestamp', () => {
+    expect(isActivityUpdateDue(null, now)).toBe(true);
+  });
+
+  it('does not update again before the rolling 24-hour interval', () => {
+    expect(isActivityUpdateDue(now - ACTIVITY_UPDATE_INTERVAL_MS + 1, now)).toBe(false);
+  });
+
+  it('updates when the rolling 24-hour interval has elapsed', () => {
+    expect(isActivityUpdateDue(now - ACTIVITY_UPDATE_INTERVAL_MS, now)).toBe(true);
   });
 });
 
