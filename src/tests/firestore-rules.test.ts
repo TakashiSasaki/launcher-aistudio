@@ -1,19 +1,34 @@
-import { describe, it, beforeAll, afterAll, beforeEach } from 'vitest';
-import { initializeTestEnvironment, RulesTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
-import { serverTimestamp, setDoc, getDoc, updateDoc, doc, deleteDoc, getDocs, collection, query } from 'firebase/firestore';
+import {
+  RulesTestContext,
+  RulesTestEnvironment,
+  assertFails,
+  assertSucceeds,
+  initializeTestEnvironment,
+} from '@firebase/rules-unit-testing';
+import {
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
+} from 'firebase/firestore';
 import * as fs from 'fs';
+import { afterAll, beforeAll, beforeEach, describe, it } from 'vitest';
 
 let testEnv: RulesTestEnvironment;
 
 beforeAll(async () => {
-  const rules = fs.readFileSync('firestore.rules', 'utf8');
   testEnv = await initializeTestEnvironment({
     projectId: 'launcher-local-test',
     firestore: {
-      rules,
+      rules: fs.readFileSync('firestore.rules', 'utf8'),
       host: '127.0.0.1',
-      port: 8080
-    }
+      port: 8080,
+    },
   });
 });
 
@@ -25,7 +40,42 @@ afterAll(async () => {
   await testEnv.cleanup();
 });
 
-function getMockItem(itemId: string, overrides: any = {}) {
+function anonymousContext(uid: string): RulesTestContext {
+  return testEnv.authenticatedContext(uid, {
+    provider_id: 'anonymous',
+    firebase: { sign_in_provider: 'anonymous' },
+  });
+}
+
+function googleContext(uid: string): RulesTestContext {
+  return testEnv.authenticatedContext(uid, {
+    email: `${uid}@example.com`,
+    email_verified: true,
+    firebase: {
+      sign_in_provider: 'google.com',
+      identities: { 'google.com': [uid] },
+    },
+  });
+}
+
+function unsupportedProviderContext(uid: string): RulesTestContext {
+  return testEnv.authenticatedContext(uid, {
+    email: `${uid}@example.com`,
+    firebase: { sign_in_provider: 'password' },
+  });
+}
+
+function mockProfile(accountType: 'anonymous' | 'google.com') {
+  return {
+    schemaVersion: 1,
+    accountType,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    lastActiveAt: serverTimestamp(),
+  };
+}
+
+function mockItem(itemId: string, overrides: Record<string, unknown> = {}) {
   return {
     schemaVersion: 1,
     itemId,
@@ -34,268 +84,216 @@ function getMockItem(itemId: string, overrides: any = {}) {
     icon: {
       type: 'generic-web',
       foreground: '#ffffff',
-      background: '#000000'
+      background: '#000000',
     },
-    sortKey: '1000',
+    sortKey: '000000001000',
     openMode: 'new-tab',
     enabled: true,
     origin: { type: 'user' },
     demoManaged: false,
-    ...overrides
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    ...overrides,
   };
 }
 
-function getMockProfile(overrides: any = {}) {
-  return {
-    schemaVersion: 1,
-    accountType: 'anonymous',
-    ...overrides
-  };
-}
+const ITEM_ID = '018f4a13-79d3-718f-a18f-4a1379d3718f';
 
 describe('Firestore Security Rules', () => {
-  it('1. unauthenticated profile read denied', async () => {
-    const unauthed = testEnv.unauthenticatedContext();
-    await assertFails(getDoc(doc(unauthed.firestore(), 'users/user1')));
+  it('denies unauthenticated profile and item access', async () => {
+    const context = testEnv.unauthenticatedContext();
+    await assertFails(getDoc(doc(context.firestore(), 'users/alice')));
+    await assertFails(
+      setDoc(
+        doc(context.firestore(), 'users/alice/launcherItems', ITEM_ID),
+        mockItem(ITEM_ID),
+      ),
+    );
   });
 
-  it('2. unauthenticated item read/write denied', async () => {
-    const unauthed = testEnv.unauthenticatedContext();
-    await assertFails(getDoc(doc(unauthed.firestore(), 'users/user1/launcherItems/item1')));
-    await assertFails(setDoc(doc(unauthed.firestore(), 'users/user1/launcherItems/item1'), {}));
+  it('allows anonymous users to create matching own profiles', async () => {
+    const alice = anonymousContext('alice');
+    const profile = doc(alice.firestore(), 'users/alice');
+    await assertSucceeds(setDoc(profile, mockProfile('anonymous')));
+    await assertSucceeds(getDoc(profile));
   });
 
-  it('3. user A can create and read user A profile', async () => {
-    const alice = testEnv.authenticatedContext('alice');
-    
-    await assertSucceeds(setDoc(doc(alice.firestore(), 'users/alice'), getMockProfile({
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-      lastActiveAt: serverTimestamp()
-    })));
-    await assertSucceeds(getDoc(doc(alice.firestore(), 'users/alice')));
+  it('allows Google users to create matching own profiles', async () => {
+    const alice = googleContext('alice');
+    await assertSucceeds(
+      setDoc(doc(alice.firestore(), 'users/alice'), mockProfile('google.com')),
+    );
   });
 
-  it('4. user A cannot read or write user B profile', async () => {
-    const alice = testEnv.authenticatedContext('alice');
-    
-    await assertFails(setDoc(doc(alice.firestore(), 'users/bob'), getMockProfile({
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-      lastActiveAt: serverTimestamp()
-    })));
+  it('denies accountType values that do not match the sign-in provider', async () => {
+    const anonymousAlice = anonymousContext('alice');
+    const googleBob = googleContext('bob');
+    await assertFails(
+      setDoc(
+        doc(anonymousAlice.firestore(), 'users/alice'),
+        mockProfile('google.com'),
+      ),
+    );
+    await assertFails(
+      setDoc(doc(googleBob.firestore(), 'users/bob'), mockProfile('anonymous')),
+    );
+  });
+
+  it('denies providers outside Google and anonymous authentication', async () => {
+    const alice = unsupportedProviderContext('alice');
+    await assertFails(
+      setDoc(doc(alice.firestore(), 'users/alice'), mockProfile('google.com')),
+    );
+    await assertFails(
+      setDoc(
+        doc(alice.firestore(), 'users/alice/launcherItems', ITEM_ID),
+        mockItem(ITEM_ID),
+      ),
+    );
+  });
+
+  it('denies cross-user profile and item access', async () => {
+    const alice = anonymousContext('alice');
     await assertFails(getDoc(doc(alice.firestore(), 'users/bob')));
+    await assertFails(
+      getDoc(doc(alice.firestore(), 'users/bob/launcherItems', ITEM_ID)),
+    );
   });
 
-  it('5. user A can create a valid item under user A', async () => {
-    const alice = testEnv.authenticatedContext('alice');
-    
-    
-    // Create profile first if needed, though item creation doesn't mandate profile existence in rules
-    const itemId = '018f4a13-79d3-718f-a18f-4a1379d3718f';
-    const itemData = getMockItem(itemId, {
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
-    });
-    
-    await assertSucceeds(setDoc(doc(alice.firestore(), 'users/alice/launcherItems', itemId), itemData));
+  it('allows an owner to create a valid launcher item', async () => {
+    const alice = anonymousContext('alice');
+    await assertSucceeds(
+      setDoc(
+        doc(alice.firestore(), 'users/alice/launcherItems', ITEM_ID),
+        mockItem(ITEM_ID),
+      ),
+    );
   });
 
-  it('6. user A cannot access user B items', async () => {
-    const alice = testEnv.authenticatedContext('alice');
-    const itemId = '018f4a13-79d3-718f-a18f-4a1379d3718f';
-    await assertFails(getDoc(doc(alice.firestore(), 'users/bob/launcherItems', itemId)));
+  it('denies a path/body itemId mismatch', async () => {
+    const alice = anonymousContext('alice');
+    await assertFails(
+      setDoc(
+        doc(alice.firestore(), 'users/alice/launcherItems', ITEM_ID),
+        mockItem('018f4a13-79d3-718f-a18f-4a1379d37199'),
+      ),
+    );
   });
 
-  it('7. path/body itemId mismatch denied', async () => {
-    const alice = testEnv.authenticatedContext('alice');
-    
-    const itemId = '018f4a13-79d3-718f-a18f-4a1379d3718f';
-    const mismatchedId = '018f4a13-79d3-718f-a18f-4a1379d37199';
-    
-    const itemData = getMockItem(mismatchedId, {
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
-    });
-    
-    await assertFails(setDoc(doc(alice.firestore(), 'users/alice/launcherItems', itemId), itemData));
+  it('denies malformed UUIDs', async () => {
+    const alice = anonymousContext('alice');
+    await assertFails(
+      setDoc(
+        doc(alice.firestore(), 'users/alice/launcherItems/not-a-uuid'),
+        mockItem('not-a-uuid'),
+      ),
+    );
   });
 
-  it('8. malformed UUID denied', async () => {
-    const alice = testEnv.authenticatedContext('alice');
-    
-    const invalidId = 'not-a-uuid';
-    
-    const itemData = getMockItem(invalidId, {
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
-    });
-    
-    await assertFails(setDoc(doc(alice.firestore(), 'users/alice/launcherItems', invalidId), itemData));
+  it('denies non-HTTPS URLs', async () => {
+    const alice = anonymousContext('alice');
+    await assertFails(
+      setDoc(
+        doc(alice.firestore(), 'users/alice/launcherItems', ITEM_ID),
+        mockItem(ITEM_ID, { url: 'http://example.com' }),
+      ),
+    );
   });
 
-  it('9. http: URL denied', async () => {
-    const alice = testEnv.authenticatedContext('alice');
-    
-    const itemId = '018f4a13-79d3-718f-a18f-4a1379d3718f';
-    
-    const itemData = getMockItem(itemId, {
-      url: 'http://example.com',
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
-    });
-    
-    await assertFails(setDoc(doc(alice.firestore(), 'users/alice/launcherItems', itemId), itemData));
+  it('denies invalid or non-normalized colors', async () => {
+    const alice = anonymousContext('alice');
+    const itemRef = doc(alice.firestore(), 'users/alice/launcherItems', ITEM_ID);
+    await assertFails(
+      setDoc(
+        itemRef,
+        mockItem(ITEM_ID, {
+          icon: { type: 'generic-web', foreground: 'white', background: '#000000' },
+        }),
+      ),
+    );
+    await assertFails(
+      setDoc(
+        itemRef,
+        mockItem(ITEM_ID, {
+          icon: { type: 'generic-web', foreground: '#FFFFFF', background: '#000000' },
+        }),
+      ),
+    );
   });
 
-  it('10. invalid color denied', async () => {
-    const alice = testEnv.authenticatedContext('alice');
-    
-    const itemId = '018f4a13-79d3-718f-a18f-4a1379d3718f';
-    
-    const itemData = getMockItem(itemId, {
-      icon: {
-        type: 'generic-web',
-        foreground: 'white',
-        background: '#000000'
-      },
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
-    });
-    
-    await assertFails(setDoc(doc(alice.firestore(), 'users/alice/launcherItems', itemId), itemData));
+  it('denies unknown icon types', async () => {
+    const alice = anonymousContext('alice');
+    await assertFails(
+      setDoc(
+        doc(alice.firestore(), 'users/alice/launcherItems', ITEM_ID),
+        mockItem(ITEM_ID, {
+          icon: { type: 'unknown', foreground: '#ffffff', background: '#000000' },
+        }),
+      ),
+    );
   });
 
-  
-  it('11. unknown icon type denied', async () => {
-    const alice = testEnv.authenticatedContext('alice');
-    
-    const itemId = '018f4a13-79d3-718f-a18f-4a1379d3718f';
-    
-    const itemData = getMockItem(itemId, {
-      icon: {
-        type: 'unknown-type',
-        foreground: '#ffffff',
-        background: '#000000'
-      },
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
-    });
-    
-    await assertFails(setDoc(doc(alice.firestore(), 'users/alice/launcherItems', itemId), itemData));
+  it('denies non-canonical sort keys', async () => {
+    const alice = anonymousContext('alice');
+    await assertFails(
+      setDoc(
+        doc(alice.firestore(), 'users/alice/launcherItems', ITEM_ID),
+        mockItem(ITEM_ID, { sortKey: '1000' }),
+      ),
+    );
   });
 
-
-  it('12. extra top-level field denied', async () => {
-    const alice = testEnv.authenticatedContext('alice');
-    
-    const itemId = '018f4a13-79d3-718f-a18f-4a1379d3718f';
-    
-    const itemData = getMockItem(itemId, {
-      extraField: 'hello',
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
-    });
-    
-    await assertFails(setDoc(doc(alice.firestore(), 'users/alice/launcherItems', itemId), itemData));
+  it('denies empty labels and extra fields', async () => {
+    const alice = anonymousContext('alice');
+    const itemRef = doc(alice.firestore(), 'users/alice/launcherItems', ITEM_ID);
+    await assertFails(setDoc(itemRef, mockItem(ITEM_ID, { label: '' })));
+    await assertFails(setDoc(itemRef, mockItem(ITEM_ID, { extraField: true })));
   });
 
-  it('13. changed itemId denied', async () => {
-    const alice = testEnv.authenticatedContext('alice');
-    
-    const itemId = '018f4a13-79d3-718f-a18f-4a1379d3718f';
-    const itemData = getMockItem(itemId, {
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
-    });
-    await assertSucceeds(setDoc(doc(alice.firestore(), 'users/alice/launcherItems', itemId), itemData));
-    
-    // Now update
-    await assertFails(updateDoc(doc(alice.firestore(), 'users/alice/launcherItems', itemId), {
-      itemId: '018f4a13-79d3-718f-a18f-4a1379d37199',
-      updatedAt: serverTimestamp()
-    }));
+  it('denies invalid origin and demo management state', async () => {
+    const alice = anonymousContext('alice');
+    const itemRef = doc(alice.firestore(), 'users/alice/launcherItems', ITEM_ID);
+    await assertFails(
+      setDoc(itemRef, mockItem(ITEM_ID, { origin: { type: 'admin' } })),
+    );
+    await assertFails(setDoc(itemRef, mockItem(ITEM_ID, { demoManaged: true })));
   });
 
-  it('14. changed createdAt denied', async () => {
-    const alice = testEnv.authenticatedContext('alice');
-    
-    const itemId = '018f4a13-79d3-718f-a18f-4a1379d3718f';
-    const itemData = getMockItem(itemId, {
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
-    });
-    await assertSucceeds(setDoc(doc(alice.firestore(), 'users/alice/launcherItems', itemId), itemData));
-    
-    // Now update
-    await assertFails(updateDoc(doc(alice.firestore(), 'users/alice/launcherItems', itemId), {
-      createdAt: serverTimestamp(), // Trying to change it
-      updatedAt: serverTimestamp()
-    }));
+  it('preserves immutable item identity and creation time', async () => {
+    const alice = anonymousContext('alice');
+    const itemRef = doc(alice.firestore(), 'users/alice/launcherItems', ITEM_ID);
+    await assertSucceeds(setDoc(itemRef, mockItem(ITEM_ID)));
+    await assertFails(
+      updateDoc(itemRef, {
+        itemId: '018f4a13-79d3-718f-a18f-4a1379d37199',
+        updatedAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(
+      updateDoc(itemRef, {
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }),
+    );
   });
 
-  it('15. invalid origin denied', async () => {
-    const alice = testEnv.authenticatedContext('alice');
-    
-    const itemId = '018f4a13-79d3-718f-a18f-4a1379d3718f';
-    const itemData = getMockItem(itemId, {
-      origin: { type: 'admin' },
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
-    });
-    await assertFails(setDoc(doc(alice.firestore(), 'users/alice/launcherItems', itemId), itemData));
+  it('allows valid updates and deletes by the owner', async () => {
+    const alice = anonymousContext('alice');
+    const itemRef = doc(alice.firestore(), 'users/alice/launcherItems', ITEM_ID);
+    await assertSucceeds(setDoc(itemRef, mockItem(ITEM_ID)));
+    await assertSucceeds(
+      updateDoc(itemRef, { label: 'New Label', updatedAt: serverTimestamp() }),
+    );
+    await assertSucceeds(deleteDoc(itemRef));
   });
 
-  it('16. demoManaged: true denied for WP02-created data', async () => {
-    const alice = testEnv.authenticatedContext('alice');
-    
-    const itemId = '018f4a13-79d3-718f-a18f-4a1379d3718f';
-    const itemData = getMockItem(itemId, {
-      demoManaged: true,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
-    });
-    await assertFails(setDoc(doc(alice.firestore(), 'users/alice/launcherItems', itemId), itemData));
-  });
-
-  it('17. valid update accepted', async () => {
-    const alice = testEnv.authenticatedContext('alice');
-    
-    const itemId = '018f4a13-79d3-718f-a18f-4a1379d3718f';
-    const itemData = getMockItem(itemId, {
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
-    });
-    await assertSucceeds(setDoc(doc(alice.firestore(), 'users/alice/launcherItems', itemId), itemData));
-    
-    await assertSucceeds(updateDoc(doc(alice.firestore(), 'users/alice/launcherItems', itemId), {
-      label: 'New Label',
-      updatedAt: serverTimestamp()
-    }));
-  });
-
-  it('18. valid delete accepted', async () => {
-    const alice = testEnv.authenticatedContext('alice');
-    
-    const itemId = '018f4a13-79d3-718f-a18f-4a1379d3718f';
-    const itemData = getMockItem(itemId, {
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
-    });
-    await assertSucceeds(setDoc(doc(alice.firestore(), 'users/alice/launcherItems', itemId), itemData));
-    
-    await assertSucceeds(deleteDoc(doc(alice.firestore(), 'users/alice/launcherItems', itemId)));
-  });
-
-  it('19. a list/query scoped to the owner succeeds', async () => {
-    const alice = testEnv.authenticatedContext('alice');
-    const q = query(collection(alice.firestore(), 'users/alice/launcherItems'));
-    await assertSucceeds(getDocs(q));
-  });
-
-  it('20. an unauthorized query fails', async () => {
-    const alice = testEnv.authenticatedContext('alice');
-    const q = query(collection(alice.firestore(), 'users/bob/launcherItems'));
-    await assertFails(getDocs(q));
+  it('allows owner-scoped queries and denies cross-user queries', async () => {
+    const alice = anonymousContext('alice');
+    await assertSucceeds(
+      getDocs(query(collection(alice.firestore(), 'users/alice/launcherItems'))),
+    );
+    await assertFails(
+      getDocs(query(collection(alice.firestore(), 'users/bob/launcherItems'))),
+    );
   });
 });
