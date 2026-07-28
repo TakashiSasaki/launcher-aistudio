@@ -9,22 +9,23 @@ Read these files in order:
 1. `README.md`
 2. `AGENTS.md`
 3. `docs/operations/google-ai-studio-workflow.md`
-4. `docs/specification.md`
-5. `docs/architecture.md`
-6. `docs/data-model.md`
-7. `docs/authentication-and-authorization.md`
-8. `docs/import-export.md`
-9. `docs/demo-data.md`
-10. Relevant records in `docs/decisions/`
-11. `docs/roadmap.md`
+4. `docs/operations/repository-hygiene.md`
+5. `docs/specification.md`
+6. `docs/architecture.md`
+7. `docs/data-model.md`
+8. `docs/authentication-and-authorization.md`
+9. `docs/import-export.md`
+10. `docs/demo-data.md`
+11. Relevant records in `docs/decisions/`
+12. `docs/roadmap.md`
 
 Repository documentation is intended to be sufficient without prior conversational context. Do not rely on assumptions derived from other repositories.
 
 ## Current phase
 
-The project is in incremental implementation controlled by explicitly approved work packages. WP00 — Project Bootstrap and Static Surface Skeleton — is implemented.
+The project is in incremental implementation controlled by explicitly approved work packages. WP00 — Project Bootstrap and Static Surface Skeleton, WP01 — PWA Baseline, and WP02 — Authentication and User Firestore CRUD — are implemented.
 
-Do not implement a later feature, connect a Firebase project, deploy resources, create production data, or expand scope unless an explicitly approved implementation work package authorizes that exact work. A roadmap entry is not authorization.
+Do not implement a later feature, connect or deploy to an unapproved Firebase project, deploy resources, create production data, or expand scope unless an explicitly approved implementation work package authorizes that exact work. A roadmap entry is not authorization.
 
 Documentation improvements, consistency corrections, decision records, threat analysis, code review, and testable interface contracts are permitted when requested.
 
@@ -95,7 +96,25 @@ Do not replace this stack without a superseding accepted ADR and an approved wor
 - Cross-user, administrative, account-merge, cleanup, and replace-import operations require trusted backend enforcement and auditability.
 - Never broaden authorization merely to make development easier.
 - Never commit Firebase Admin credentials, service-account keys, private keys, access tokens, `.env` secrets, exported user data, or production datasets.
-- Do not commit transient PR-helper files, review-reply payloads, scratch scripts, tool-failure artifacts, or generated temporary JSON.
+
+## Repository hygiene
+
+`docs/operations/repository-hygiene.md` is binding. Repository cleanliness is part of task completion, not optional cleanup.
+
+Before publishing any change:
+
+- inspect the complete status and diff against the task's starting commit;
+- remove one-off patch scripts, temporary shell scripts, scratch files, copied manifests, temporary package files, command output, preview logs, emulator logs, and tool-failure artifacts;
+- consolidate duplicated documentation fragments into durable final documents;
+- ensure generated artifacts are intentional, reproducible, and referenced by the project;
+- update `.gitignore` when a newly observed disposable file class should be ignored, while also deleting any already-tracked instance;
+- rerun the required checks after cleanup and inspect the final diff again.
+
+Files such as `patch_*.cjs`, `patch_*.js`, `patch_*.py`, `update_*.sh`, `package.tmp.json`, `preview.log`, temporary JSON payloads, and empty helper placeholders are presumed transient and must not be committed unless the approved work package explicitly establishes them as maintained project tools.
+
+Google AI Studio must perform this inspection immediately before publishing to `main`. A file is not a project artifact merely because it was useful while the agent completed the task.
+
+Every final report must state that the complete final diff was inspected, identify any unusual generated or utility file intentionally retained, and report any hygiene check that could not be performed.
 
 ## Branch and commit conventions
 
@@ -122,6 +141,7 @@ Before declaring work complete:
 - Verify that authorization is enforced server-side or by Security Rules, not merely hidden in the UI.
 - Verify that destructive operations have explicit scope, validation, failure handling, and recovery semantics.
 - Verify migration and import/export completeness; completeness checking is mandatory, not optional.
+- Inspect the complete final repository diff and remove transient artifacts.
 - Report commands and checks actually run.
 - Report checks unavailable in the current environment instead of claiming success.
 - State whether Google AI Studio must perform a runtime follow-up before merge.
