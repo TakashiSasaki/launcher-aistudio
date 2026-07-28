@@ -1,34 +1,43 @@
-import { GoogleAuthProvider, signInWithPopup, signInAnonymously, signOut, onAuthStateChanged, User } from 'firebase/auth';
-import { auth, appConfig } from './config';
+import {
+  GoogleAuthProvider,
+  User,
+  onAuthStateChanged,
+  signInAnonymously,
+  signInWithPopup,
+  signOut,
+} from 'firebase/auth';
+import { appConfig, auth } from './config';
 
 export function setupAuthListener(callback: (user: User | null) => void) {
   if (appConfig.mode === 'unconfigured' || !auth) {
     callback(null);
-    return () => {};
+    return () => undefined;
   }
+
   return onAuthStateChanged(auth, callback);
 }
 
 export async function loginWithGoogle() {
-  if (!auth) return;
-  const provider = new GoogleAuthProvider();
-  try {
-    return await signInWithPopup(auth, provider);
-  } catch (error) {
-    console.error('Login failed', error);
+  if (!auth) {
+    throw new Error('Firebase Authentication is not configured.');
   }
+
+  const provider = new GoogleAuthProvider();
+  return signInWithPopup(auth, provider);
 }
 
 export async function loginAnonymously() {
-  if (!auth) return;
-  try {
-    return await signInAnonymously(auth);
-  } catch (error) {
-    console.error('Anonymous login failed', error);
+  if (!auth) {
+    throw new Error('Firebase Authentication is not configured.');
   }
+
+  return signInAnonymously(auth);
 }
 
 export async function logoutUser() {
-  if (!auth) return;
+  if (!auth) {
+    throw new Error('Firebase Authentication is not configured.');
+  }
+
   return signOut(auth);
 }

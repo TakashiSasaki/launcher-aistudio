@@ -51,16 +51,22 @@ No custom application cache is introduced in this phase.
 
 ## Phase 3 — Authentication and user Firestore data
 
-Potential scope after explicit approval:
+Status: implemented by WP02 — Authentication and User Firestore CRUD. Post-implementation hardening is proposed in the WP02 corrective draft pull request and requires command-capable validation before merge.
 
-- explicit Google/anonymous choice;
-- `/app` authentication guard;
-- user profile and launcher-item CRUD;
+Implemented scope:
+
+- explicit Google/anonymous authentication choice;
+- authenticated `/app` launcher-item CRUD;
+- owner-scoped user profiles and launcher items;
 - UUIDv7 item creation;
-- HTTPS-only validation;
-- ownership Security Rules;
-- activity timestamp throttling;
-- local emulator tests before production use.
+- parser-based HTTPS validation;
+- Google/anonymous-provider-bound Firestore Security Rules;
+- stored-timestamp-based 24-hour activity throttling;
+- Authentication and Firestore emulator configuration;
+- unit and Security Rules tests;
+- online-only Firestore behavior.
+
+Production Firebase-project activation and smoke testing remain separate, explicitly authorized work.
 
 ## Phase 4 — Demo persistence lifecycle
 
