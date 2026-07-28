@@ -4,6 +4,7 @@ import * as fs from 'fs';
 // @ts-ignore Node.js types are intentionally not yet part of the browser-focused project.
 import * as path from 'path';
 import {
+  
   PWA_STATUS_CHANGED_EVENT,
   registerServiceWorker,
 } from '../pwa/registration';

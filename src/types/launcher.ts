@@ -1,9 +1,23 @@
-export interface LauncherItemData {
+export interface LauncherItem {
+  schemaVersion: number;
   itemId: string;
-  url: string;
   label: string;
-  iconType: string;
-  iconColor: string;
+  url: string;
+  icon: {
+    type: string;
+    foreground: string;
+    background: string;
+  };
+  sortKey: string;
+  openMode: 'new-tab';
+  enabled: boolean;
+  origin: {
+    type: string;
+    [key: string]: any;
+  };
+  demoManaged: boolean;
+  createdAt: any;
+  updatedAt: any;
 }
 
 export function isValidHttpsUrl(urlStr: string): boolean {

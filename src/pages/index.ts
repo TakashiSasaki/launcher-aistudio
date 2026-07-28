@@ -1,3 +1,5 @@
+import { appConfig } from '../firebase/config';
+import { setupAuthListener } from '../firebase/auth';
 import { renderLauncherGrid } from '../components/launcher-grid';
 import { demoData } from '../data/demo';
 import {
@@ -22,7 +24,7 @@ export function renderHomePage(): HTMLElement {
   return container;
 }
 
-export function renderAppPage(): HTMLElement {
+export function renderAppPage_old(): HTMLElement {
   const container = document.createElement('div');
   container.className = 'container';
   container.innerHTML = `
@@ -118,7 +120,12 @@ export function renderDevPage(): HTMLElement {
     <p><strong>Purpose:</strong> Lightweight, mobile-first PWA web launcher.</p>
     <h2>Implementation Status</h2>
     <ul>
-      <li>Firebase Authentication: Not Implemented</li>
+      <li>Configuration Mode: <span id="dev-fb-mode"></span></li>
+      <li>Firebase Initialized: <span id="dev-fb-init"></span></li>
+      <li>Authentication Emulator Connected: <span id="dev-fb-auth-emu"></span></li>
+      <li>Firestore Emulator Connected: <span id="dev-fb-db-emu"></span></li>
+      <li>Authentication State: <span id="dev-fb-auth-state"></span></li>
+      <li>Firestore Persistence: online-only</li>
       <li>Firestore Access: Not Implemented</li>
       <li>Persistent Demo: Not Implemented</li>
     </ul>
@@ -159,6 +166,26 @@ export function renderDevPage(): HTMLElement {
     window.addEventListener(PWA_STATUS_CHANGED_EVENT, handleStatusChange);
   }
 
+
+  const setDevText = (id: string, text: string) => {
+    const el = container.querySelector('#' + id);
+    if (el) el.textContent = text;
+  };
+  setDevText('dev-fb-mode', appConfig.mode);
+  setDevText('dev-fb-init', appConfig.isFirebaseInitialized ? 'Yes' : 'No');
+  setDevText('dev-fb-auth-emu', appConfig.isAuthEmulatorConnected ? 'Yes' : 'No');
+  setDevText('dev-fb-db-emu', appConfig.isFirestoreEmulatorConnected ? 'Yes' : 'No');
+  
+  setupAuthListener(user => {
+    if (!user) {
+      setDevText('dev-fb-auth-state', 'Signed out');
+    } else if (user.isAnonymous) {
+      setDevText('dev-fb-auth-state', 'Anonymous');
+    } else {
+      setDevText('dev-fb-auth-state', 'Google');
+    }
+  });
+
   return container;
 }
 
@@ -190,3 +217,4 @@ export function renderNotFoundPage(): HTMLElement {
   `;
   return container;
 }
+export { renderAppPage } from './app';

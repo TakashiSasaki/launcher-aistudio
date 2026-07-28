@@ -100,11 +100,11 @@ Illustrative shape:
 
 ### Content invariants
 
-- `label` is a non-empty bounded string after normalization.
-- `url` parses successfully and has protocol exactly `https:`.
+- `label` is a non-empty bounded string (max 100 characters) after normalization.
+- `url` parses successfully, has protocol exactly `https:`, and length <= 2048 characters.
 - `icon.type` belongs to the application-defined icon catalog.
 - icon colors match an approved normalized color representation.
-- `sortKey` is independent of ID and creation time.
+- `sortKey` is an independent string (max 50 characters) and independent of ID and creation time.
 - unknown top-level fields are rejected or handled only by an explicit forward-compatibility rule.
 - creation timestamps are immutable; update timestamps are server-controlled where practical.
 

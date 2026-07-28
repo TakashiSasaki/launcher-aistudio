@@ -1,6 +1,6 @@
 # Architecture
 
-Status: logical architecture with the WP00 frontend foundation selected and implemented. Firebase and privileged-backend technology choices remain incomplete.
+Status: logical architecture with the WP00 frontend foundation and WP02 Firebase integration implemented. Privileged-backend technology choices remain incomplete.
 
 ## System context
 
@@ -43,7 +43,7 @@ ADR-0005 selected and WP00 implemented:
 
 The package scripts are npm-compatible and may be executed by Bun in Google AI Studio, but application code must not depend on Bun-specific APIs without a later accepted decision.
 
-This implementation does not yet imply Firebase connectivity, PWA caching, production hosting, or privileged backend selection.
+WP02 added Firebase Authentication (Google and Anonymous) and Cloud Firestore for user-scoped data persistence.
 
 ## Trust boundaries
 

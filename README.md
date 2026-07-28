@@ -69,7 +69,7 @@ All non-AI-Studio changes must start from the latest `main`, use a work branch, 
 
 ## Current status
 
-**WP00 — Project Bootstrap and Static Surface Skeleton** and **WP01 — PWA Baseline** have been implemented.
+**WP00 — Project Bootstrap and Static Surface Skeleton**, **WP01 — PWA Baseline**, and **WP02 — Authentication and User Firestore CRUD** have been implemented.
 
 ### Implementation notes
 
@@ -79,4 +79,4 @@ All non-AI-Studio changes must start from the latest `main`, use a work branch, 
 - **Development**: Run `npm run dev` to start the local Vite development server.
 - **Build**: Run `npm run build` to create a production build in the `dist` directory.
 - **Tests**: Run `npm run test` to run Vitest unit tests, and `npm run type-check` for static type verification.
-- **Out of scope and not implemented**: Firebase Authentication, Cloud Firestore, persistent demo data, PWA caching, account linking/merging, and import/export remain unimplemented placeholders.
+- **Out of scope and not implemented**: Persistent demo data, PWA caching, account linking/merging, and import/export remain unimplemented placeholders.

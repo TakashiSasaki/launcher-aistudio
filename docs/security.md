@@ -1,6 +1,6 @@
 # Security requirements
 
-Status: baseline security invariants.
+Status: baseline security invariants. WP02 Firestore rules implemented.
 
 ## Authorization
 

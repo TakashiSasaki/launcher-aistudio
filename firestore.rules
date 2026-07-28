@@ -1,0 +1,92 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+    
+    function isValidId(id) {
+      return id is string && id.size() == 36 && id.matches('^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$');
+    }
+    
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isSignedIn() { return request.auth != null; }
+    
+    function isValidProfile(data) {
+      return data.keys().hasAll(['schemaVersion', 'accountType', 'createdAt', 'updatedAt', 'lastActiveAt']) 
+        && data.keys().size() == 5
+        && data.schemaVersion == 1
+        && (data.accountType == 'anonymous' || data.accountType == 'google.com')
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && data.lastActiveAt is timestamp;
+    }
+    
+    match /users/{userId} {
+      allow get: if isSignedIn() && request.auth.uid == userId;
+      
+      allow create: if isSignedIn() 
+        && request.auth.uid == userId 
+        && isValidProfile(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && incoming().lastActiveAt == request.time;
+        
+      allow update: if isSignedIn()
+        && request.auth.uid == userId
+        && isValidProfile(incoming())
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().lastActiveAt == request.time;
+      
+      match /launcherItems/{itemId} {
+        function isValidIcon(icon) {
+          return icon.keys().hasAll(['type', 'foreground', 'background'])
+            && icon.keys().size() == 3
+            && icon.type in ['generic-web', 'link', 'book', 'mail']
+            && icon.foreground is string && icon.foreground.matches('^#[0-9a-fA-F]{6}$')
+            && icon.background is string && icon.background.matches('^#[0-9a-fA-F]{6}$');
+        }
+        
+        function isValidItem(data, pathItemId) {
+          return data.keys().hasAll(['schemaVersion', 'itemId', 'label', 'url', 'icon', 'sortKey', 'openMode', 'enabled', 'origin', 'demoManaged', 'createdAt', 'updatedAt'])
+            && data.keys().size() == 12
+            && data.schemaVersion == 1
+            && data.itemId == pathItemId
+            && data.itemId is string && isValidId(data.itemId)
+            && data.label is string && data.label.size() > 0 && data.label.size() <= 100
+            && data.url is string && data.url.size() <= 2048 && data.url.matches('^https://.*')
+            && isValidIcon(data.icon)
+            && data.sortKey is string && data.sortKey.size() <= 50
+            && data.openMode == 'new-tab'
+            && data.enabled is bool
+            && data.origin.keys().hasAll(['type']) && data.origin.keys().size() == 1 && data.origin.type == 'user'
+            && data.demoManaged == false
+            && data.createdAt is timestamp
+            && data.updatedAt is timestamp;
+        }
+
+        allow read: if isSignedIn() && request.auth.uid == userId;
+        
+        allow create: if isSignedIn()
+          && request.auth.uid == userId
+          && isValidId(itemId)
+          && isValidItem(incoming(), itemId)
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time;
+          
+        allow update: if isSignedIn()
+          && request.auth.uid == userId
+          && isValidId(itemId)
+          && isValidItem(incoming(), itemId)
+          && incoming().createdAt == existing().createdAt
+          && incoming().itemId == existing().itemId
+          && incoming().updatedAt == request.time;
+          
+        allow delete: if isSignedIn() && request.auth.uid == userId;
+      }
+    }
+  }
+}
