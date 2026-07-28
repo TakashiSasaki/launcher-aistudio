@@ -4,10 +4,10 @@ import {
   collection,
   deleteDoc,
   doc,
-  getDoc,
   onSnapshot,
   orderBy,
   query,
+  runTransaction,
   serverTimestamp,
   setDoc,
   updateDoc,
@@ -51,31 +51,34 @@ export async function createOrUpdateProfile(user: User): Promise<void> {
   }
 
   const userRef = doc(db, USERS_COLLECTION, user.uid);
-  const snap = await getDoc(userRef);
   const accountType = accountTypeForUser(user);
 
-  if (!snap.exists()) {
-    await setDoc(userRef, {
-      schemaVersion: 1,
-      accountType,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-      lastActiveAt: serverTimestamp(),
-    });
-    return;
-  }
+  await runTransaction(db, async (transaction) => {
+    const snap = await transaction.get(userRef);
 
-  const data = snap.data();
-  const activityUpdateDue = isActivityUpdateDue(timestampMillis(data.lastActiveAt));
-  const accountTypeNeedsCorrection = data.accountType !== accountType;
+    if (!snap.exists()) {
+      transaction.set(userRef, {
+        schemaVersion: 1,
+        accountType,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        lastActiveAt: serverTimestamp(),
+      });
+      return;
+    }
 
-  if (activityUpdateDue || accountTypeNeedsCorrection) {
-    await updateDoc(userRef, {
-      accountType,
-      updatedAt: serverTimestamp(),
-      lastActiveAt: serverTimestamp(),
-    });
-  }
+    const data = snap.data();
+    const activityUpdateDue = isActivityUpdateDue(timestampMillis(data.lastActiveAt));
+    const accountTypeNeedsCorrection = data.accountType !== accountType;
+
+    if (activityUpdateDue || accountTypeNeedsCorrection) {
+      transaction.update(userRef, {
+        accountType,
+        updatedAt: serverTimestamp(),
+        lastActiveAt: serverTimestamp(),
+      });
+    }
+  });
 }
 
 export function subscribeToLauncherItems(
