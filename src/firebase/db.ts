@@ -19,10 +19,10 @@ import {
   LauncherItemUpdates,
   NewLauncherItem,
 } from '../types/launcher';
+import { isActivityUpdateDue } from '../utils/activity';
 import { generateItemId } from '../utils/uuid';
 
 const USERS_COLLECTION = 'users';
-const ACTIVITY_UPDATE_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 function accountTypeForUser(user: User): 'anonymous' | 'google.com' {
   return user.isAnonymous ? 'anonymous' : 'google.com';
@@ -66,9 +66,7 @@ export async function createOrUpdateProfile(user: User): Promise<void> {
   }
 
   const data = snap.data();
-  const lastActiveAt = timestampMillis(data.lastActiveAt);
-  const activityUpdateDue =
-    lastActiveAt === null || Date.now() - lastActiveAt >= ACTIVITY_UPDATE_INTERVAL_MS;
+  const activityUpdateDue = isActivityUpdateDue(timestampMillis(data.lastActiveAt));
   const accountTypeNeedsCorrection = data.accountType !== accountType;
 
   if (activityUpdateDue || accountTypeNeedsCorrection) {
