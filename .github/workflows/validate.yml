@@ -38,13 +38,34 @@ jobs:
         run: npm ci
 
       - name: Type-check
-        run: npm run type-check
+        run: |
+          set -o pipefail
+          npm run type-check 2>&1 | tee type-check.log
 
       - name: Run unit tests
-        run: npm run test
+        run: |
+          set -o pipefail
+          npm run test 2>&1 | tee unit-test.log
 
       - name: Run Firestore Security Rules tests
-        run: npm run test:rules
+        run: |
+          set -o pipefail
+          npm run test:rules 2>&1 | tee rules-test.log
 
       - name: Build production assets
-        run: npm run build
+        run: |
+          set -o pipefail
+          npm run build 2>&1 | tee build.log
+
+      - name: Upload validation diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: validation-diagnostics
+          path: |
+            type-check.log
+            unit-test.log
+            rules-test.log
+            build.log
+          if-no-files-found: ignore
+          retention-days: 7
