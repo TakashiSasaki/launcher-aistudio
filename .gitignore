@@ -34,7 +34,13 @@ tmp/
 .DS_Store
 Thumbs.db
 
-# Transient agent and review artifacts
+# Transient agent, patching, and review artifacts
+patch_*.js
+patch_*.cjs
+patch_*.mjs
+patch_*.py
+update_*.sh
+package.tmp.json
 patch_pr.*
 reply_payload.json
 review_payload.json
