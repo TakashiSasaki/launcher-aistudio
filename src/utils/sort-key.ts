@@ -24,6 +24,18 @@ export function sortKeyForIndex(index: number): string {
   return formatSortKey((index + 1) * SORT_KEY_STEP);
 }
 
+export function nextSortKey(existingSortKeys: readonly string[]): string {
+  const maximum = existingSortKeys.reduce((currentMaximum, sortKey) => {
+    if (!isValidSortKey(sortKey)) {
+      throw new Error(`Invalid existing sort key: ${sortKey}`);
+    }
+
+    return Math.max(currentMaximum, Number(sortKey));
+  }, 0);
+
+  return formatSortKey(maximum + SORT_KEY_STEP);
+}
+
 export function orderedItemIdsAfterMove(
   itemIds: readonly string[],
   itemId: string,
