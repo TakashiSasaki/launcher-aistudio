@@ -344,6 +344,7 @@ export function renderAppPage(): HTMLElement {
     const url = formUrl.value.trim();
     const foreground = formFg.value.toLowerCase();
     const background = formBg.value.toLowerCase();
+    const iconType = formIconType.value;
 
     if (label.length === 0 || label.length > 100) {
       showError(errorFeedback, 'Label must contain between 1 and 100 characters.');
@@ -357,7 +358,7 @@ export function renderAppPage(): HTMLElement {
       showError(errorFeedback, 'Colors must be lowercase six-digit hexadecimal values.');
       return;
     }
-    if (!isIconType(formIconType.value)) {
+    if (!isIconType(iconType)) {
       showError(errorFeedback, 'Select a supported icon type.');
       return;
     }
@@ -366,7 +367,7 @@ export function renderAppPage(): HTMLElement {
       label,
       url,
       icon: {
-        type: formIconType.value,
+        type: iconType,
         foreground,
         background,
       },
