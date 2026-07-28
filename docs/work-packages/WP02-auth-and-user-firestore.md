@@ -1,6 +1,6 @@
 # WP02 — Authentication and User Firestore CRUD
 
-Status: Implemented; post-implementation hardening is pending runtime validation in the corrective draft pull request recorded by `docs/reviews/WP02-follow-up.md`.
+Status: Implemented. Post-implementation hardening passed automated validation; browser-level emulator verification remains after the corrective draft pull request is merged.
 
 ## Scope
 
@@ -24,12 +24,13 @@ Status: Implemented; post-implementation hardening is pending runtime validation
 - Google and anonymous token providers only.
 - Profile `accountType` bound to the authentication token provider.
 - Stored Firestore activity time used for the rolling 24-hour write-throttle decision.
+- Transaction-safe profile initialization and activity update.
 
-## Verification boundary
+## Automated verification
 
-The source repository records unit tests, Firestore Rules tests, type checking, and production build commands. The current connector environment could inspect and modify repository files but could not execute the Node/Firebase toolchain because outbound repository download was unavailable.
+GitHub Actions run #8 passed on corrective branch head `15b0973b34f0a860096a04d68e9e2ad4ebca7a3e`.
 
-Before the corrective pull request is merged, a command-capable environment must run:
+Verified commands:
 
 ```sh
 npm ci
@@ -39,4 +40,16 @@ npm run test:rules
 npm run build
 ```
 
-Emulator CRUD and route-lifecycle smoke tests described in `docs/reviews/WP02-follow-up.md` are also required. A real Firebase-project smoke test has not been performed.
+The unit suite reported 40 passing tests. The Firestore Emulator Rules suite completed successfully. The production build succeeded.
+
+## Remaining verification boundary
+
+The remaining checks require the Google AI Studio browser/container after the corrective pull request is merged into `main`:
+
+- Authentication Emulator anonymous sign-in;
+- complete launcher-item CRUD, enable/disable, and reorder workflow;
+- repeated route transitions without duplicate listeners;
+- stored `lastActiveAt` remaining unchanged during a second access within 24 hours;
+- `/dev`, `/demo`, `/admin`, manifest, icons, and pass-through Service Worker smoke tests.
+
+A real Firebase-project smoke test has not been performed. Production project activation, deployment, and WP03 remain separately authorized work.
