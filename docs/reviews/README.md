@@ -7,4 +7,4 @@ A review document is not itself authorization for unrelated feature work. Propos
 Current reviews:
 
 - [WP01 follow-up review](WP01-follow-up.md)
-- [WP02 repository-hygiene follow-up](WP02-repository-hygiene-follow-up.md)
+- [WP02 follow-up review](WP02-follow-up.md)

@@ -33,11 +33,13 @@ admin/accountMergeSessions/{sessionId}
 admin/cleanupRuns/{runId}
 ```
 
+WP02 implements only `users/{uid}` and `users/{uid}/launcherItems/{itemId}`. The other paths remain approved logical design for later work packages.
+
 Static demo definitions may instead be application-bundled files. Firestore system demo documents are optional unless runtime administration of demo definitions is approved.
 
 ## 3. User document
 
-Illustrative logical shape:
+Current WP02 shape:
 
 ```json
 {
@@ -45,24 +47,27 @@ Illustrative logical shape:
   "accountType": "anonymous",
   "createdAt": "server timestamp",
   "updatedAt": "server timestamp",
-  "lastActiveAt": "server timestamp",
-  "preferences": {
-    "theme": "system"
-  }
+  "lastActiveAt": "server timestamp"
 }
 ```
 
 Required invariants:
 
-- document path UID is authoritative ownership;
-- `accountType` is derived from verified Authentication state and must not be freely writable by the client;
-- `lastActiveAt` represents application activity and may be write-throttled;
-- linking or merging to Google changes expiration eligibility;
+- the document-path UID is authoritative ownership;
+- `accountType` is exactly `anonymous` or `google.com`;
+- Firestore Security Rules require `accountType` to match `request.auth.token.firebase.sign_in_provider`;
+- providers other than anonymous and Google authentication cannot access ordinary user data;
+- `createdAt` is immutable;
+- `updatedAt` and `lastActiveAt` use server timestamps;
+- the application reads the stored `lastActiveAt` value before deciding whether the rolling 24-hour activity update is due;
+- linking or merging to Google changes expiration eligibility and requires a later explicitly designed profile transition;
 - user export does not include Firebase UID as portable ownership identity.
+
+Preferences are not embedded in the implemented WP02 profile. A later work package must define their path, schema, export behavior, and merge precedence before persistence.
 
 ## 4. Launcher item
 
-Illustrative shape:
+Current logical shape:
 
 ```json
 {
@@ -75,7 +80,7 @@ Illustrative shape:
     "foreground": "#ffffff",
     "background": "#3367d6"
   },
-  "sortKey": "1000",
+  "sortKey": "000000001000",
   "openMode": "new-tab",
   "enabled": true,
   "origin": {
@@ -100,13 +105,21 @@ Illustrative shape:
 
 ### Content invariants
 
-- `label` is a non-empty bounded string (max 100 characters) after normalization.
-- `url` parses successfully, has protocol exactly `https:`, and length <= 2048 characters.
-- `icon.type` belongs to the application-defined icon catalog.
-- icon colors match an approved normalized color representation.
-- `sortKey` is an independent string (max 50 characters) and independent of ID and creation time.
-- unknown top-level fields are rejected or handled only by an explicit forward-compatibility rule.
-- creation timestamps are immutable; update timestamps are server-controlled where practical.
+- `schemaVersion` is integer `1` for the current document shape.
+- `label` is trimmed, non-empty, and no longer than 100 characters.
+- `url` is no longer than 2048 characters, parses successfully, and has protocol exactly `https:`.
+- `icon.type` is one of `generic-web`, `link`, `book`, or `mail` in WP02.
+- icon colors are normalized lowercase six-digit hexadecimal strings.
+- `sortKey` is exactly 12 decimal digits and is independent of ID and creation time.
+- fixed-width decimal keys preserve intended numeric ordering under Firestore string ordering.
+- adjacent reordering swaps the two affected keys atomically.
+- `openMode` is `new-tab` in WP02.
+- `enabled` is boolean.
+- ordinary WP02-created data has exactly `origin: { "type": "user" }` and `demoManaged: false`.
+- unknown top-level and nested fields are rejected by Security Rules.
+- `createdAt` is immutable and both timestamp fields are server-controlled.
+
+Existing data with variable-width order keys such as `1000` is non-canonical and must be normalized before it can be updated under the corrected Rules. No production migration is authorized by WP02.
 
 ## 5. Provenance
 
@@ -167,7 +180,9 @@ Recommended tagged-union variants:
 }
 ```
 
-Provenance may require bounded nesting or a normalized event history if chains become deep. Initial implementation may retain the immediate origin plus operation references rather than an unbounded embedded history.
+WP02 permits only the user-created variant in persisted user writes. Later work packages must extend both the application schema and Security Rules together before writing other variants.
+
+Provenance may require bounded nesting or a normalized event history if chains become deep. Initial implementation should retain the immediate origin plus operation references rather than an unbounded embedded history.
 
 ## 6. Demo management state
 
@@ -177,7 +192,7 @@ Historical demo origin and current deletion management are separate.
 - `demoManaged == true` means a demo-cleanup operation may delete it.
 - promoting an item to ordinary user management sets `demoManaged` to `false` while retaining demo origin.
 - editing a demo item does not automatically promote it.
-- a user must explicitly choose to retain/promote a demo-derived item.
+- a user must explicitly choose to retain or promote a demo-derived item.
 
 A load-session document may summarize one demo load:
 
@@ -286,4 +301,4 @@ Adding a new user-owned collection requires updating cleanup logic, export scope
 
 ## 11. Schema versioning
 
-Persisted documents and portable exports require explicit schema/format versions. Version fields must be integers with defined migration paths. An agent must not reinterpret an old shape as the current shape without an explicit migration or compatibility layer.
+Persisted documents and portable exports require explicit schema or format versions. Version fields must be integers with defined migration paths. An agent must not reinterpret an old shape as the current shape without an explicit migration or compatibility layer.

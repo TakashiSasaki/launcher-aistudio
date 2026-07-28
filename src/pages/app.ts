@@ -1,14 +1,35 @@
-import { setupAuthListener, loginWithGoogle, loginAnonymously, logoutUser } from '../firebase/auth';
-import { createOrUpdateProfile, subscribeToLauncherItems, addLauncherItem, updateLauncherItem, deleteLauncherItem } from '../firebase/db';
-import { appConfig } from '../firebase/config';
 import { User } from 'firebase/auth';
-import { LauncherItem } from '../types/launcher';
 import { renderLauncherGrid } from '../components/launcher-grid';
+import {
+  loginAnonymously,
+  loginWithGoogle,
+  logoutUser,
+  setupAuthListener,
+} from '../firebase/auth';
+import { appConfig } from '../firebase/config';
+import {
+  addLauncherItem,
+  createOrUpdateProfile,
+  deleteLauncherItem,
+  subscribeToLauncherItems,
+  swapLauncherItemSortKeys,
+  updateLauncherItem,
+} from '../firebase/db';
+import {
+  LauncherItem,
+  isIconType,
+  isValidHttpsUrl,
+} from '../types/launcher';
+import { nextSortKey } from '../utils/sort-key';
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
 
 export function renderAppPage(): HTMLElement {
   const container = document.createElement('div');
   container.className = 'container app-container';
-  
+
   if (appConfig.mode === 'unconfigured') {
     container.innerHTML = `
       <h1>App</h1>
@@ -17,39 +38,38 @@ export function renderAppPage(): HTMLElement {
     `;
     return container;
   }
-  
+
   container.innerHTML = `
     <h1>App</h1>
-    <div id="auth-state" style="margin-bottom: 20px;">
-      <p>Loading...</p>
-    </div>
+    <div id="auth-state" style="margin-bottom: 10px;"><p>Loading...</p></div>
+    <div id="auth-error-feedback" role="alert" style="color: #b00020; margin-bottom: 10px;"></div>
     <div id="app-content" style="display: none;">
-      <div id="error-feedback" style="color: red; margin-bottom: 10px;"></div>
+      <div id="error-feedback" role="alert" style="color: #b00020; margin-bottom: 10px;"></div>
       <div style="margin-bottom: 20px;">
-        <button id="btn-create" style="padding: 8px 16px;">Create Item</button>
-        <button id="btn-signout" style="padding: 8px 16px;">Sign Out</button>
+        <button id="btn-create" type="button" style="padding: 8px 16px;">Create Item</button>
+        <button id="btn-signout" type="button" style="padding: 8px 16px;">Sign Out</button>
       </div>
       <div id="item-form-container" style="display: none; border: 1px solid #ccc; padding: 15px; margin-bottom: 20px; border-radius: 8px;">
         <h3 id="form-title">Create Item</h3>
         <input type="hidden" id="form-item-id">
         <div style="margin-bottom: 10px;">
-          <label style="display:block;margin-bottom:5px;">Label</label>
-          <input type="text" id="form-label" style="width: 100%; padding: 8px;">
+          <label for="form-label" style="display:block;margin-bottom:5px;">Label</label>
+          <input type="text" id="form-label" maxlength="100" required style="width: 100%; padding: 8px;">
         </div>
         <div style="margin-bottom: 10px;">
-          <label style="display:block;margin-bottom:5px;">URL (https://)</label>
-          <input type="url" id="form-url" style="width: 100%; padding: 8px;" pattern="^https://.*">
+          <label for="form-url" style="display:block;margin-bottom:5px;">URL (HTTPS only)</label>
+          <input type="url" id="form-url" maxlength="2048" required style="width: 100%; padding: 8px;">
         </div>
         <div style="margin-bottom: 10px;">
-          <label style="display:block;margin-bottom:5px;">Icon Background Color (#Hex)</label>
-          <input type="text" id="form-bg" style="width: 100%; padding: 8px;" value="#3367d6" pattern="^#[0-9a-fA-F]{6}$">
+          <label for="form-bg" style="display:block;margin-bottom:5px;">Icon Background Color</label>
+          <input type="color" id="form-bg" value="#3367d6">
         </div>
         <div style="margin-bottom: 10px;">
-          <label style="display:block;margin-bottom:5px;">Icon Foreground Color (#Hex)</label>
-          <input type="text" id="form-fg" style="width: 100%; padding: 8px;" value="#ffffff" pattern="^#[0-9a-fA-F]{6}$">
+          <label for="form-fg" style="display:block;margin-bottom:5px;">Icon Foreground Color</label>
+          <input type="color" id="form-fg" value="#ffffff">
         </div>
         <div style="margin-bottom: 10px;">
-          <label style="display:block;margin-bottom:5px;">Icon Type</label>
+          <label for="form-icon-type" style="display:block;margin-bottom:5px;">Icon Type</label>
           <select id="form-icon-type" style="width: 100%; padding: 8px;">
             <option value="generic-web">Generic Web</option>
             <option value="link">Link</option>
@@ -58,22 +78,16 @@ export function renderAppPage(): HTMLElement {
           </select>
         </div>
         <div style="margin-bottom: 10px;">
-          <label style="display:block;margin-bottom:5px;">
-            <input type="checkbox" id="form-enabled" checked> Enabled
-          </label>
-        </div>
-        <div style="margin-bottom: 10px;">
-          <label style="display:block;margin-bottom:5px;">Sort Key (for ordering)</label>
-          <input type="text" id="form-sort-key" style="width: 100%; padding: 8px;" value="1000">
+          <label><input type="checkbox" id="form-enabled" checked> Enabled</label>
         </div>
         <div>
-          <button id="btn-save" style="padding: 8px 16px; background: #3367d6; color: white; border: none;">Save</button>
-          <button id="btn-cancel" style="padding: 8px 16px;">Cancel</button>
+          <button id="btn-save" type="button" style="padding: 8px 16px; background: #3367d6; color: white; border: none;">Save</button>
+          <button id="btn-cancel" type="button" style="padding: 8px 16px;">Cancel</button>
         </div>
       </div>
       <div id="grid-container"></div>
       <div id="empty-state" style="display: none; padding: 20px; text-align: center; color: #666;">
-        No items yet. Create one above!
+        No items yet. Create one above.
       </div>
       <div id="list-management" style="margin-top: 30px;">
         <h3>Manage Items</h3>
@@ -82,14 +96,14 @@ export function renderAppPage(): HTMLElement {
     </div>
     <div style="margin-top: 20px;"><a href="/" data-link>&larr; Back to Home</a></div>
   `;
-  
+
   const authStateEl = container.querySelector('#auth-state') as HTMLElement;
+  const authErrorFeedback = container.querySelector('#auth-error-feedback') as HTMLElement;
   const appContentEl = container.querySelector('#app-content') as HTMLElement;
   const gridContainer = container.querySelector('#grid-container') as HTMLElement;
   const emptyState = container.querySelector('#empty-state') as HTMLElement;
   const manageList = container.querySelector('#manage-list') as HTMLElement;
   const errorFeedback = container.querySelector('#error-feedback') as HTMLElement;
-  
   const formContainer = container.querySelector('#item-form-container') as HTMLElement;
   const formTitle = container.querySelector('#form-title') as HTMLElement;
   const formItemId = container.querySelector('#form-item-id') as HTMLInputElement;
@@ -99,82 +113,90 @@ export function renderAppPage(): HTMLElement {
   const formFg = container.querySelector('#form-fg') as HTMLInputElement;
   const formIconType = container.querySelector('#form-icon-type') as HTMLSelectElement;
   const formEnabled = container.querySelector('#form-enabled') as HTMLInputElement;
-  const formSortKey = container.querySelector('#form-sort-key') as HTMLInputElement;
-  
+
   let currentUser: User | null = null;
   let currentItems: LauncherItem[] = [];
   let unsubscribeItems: (() => void) | null = null;
-  
-  const showError = (msg: string) => {
-    errorFeedback.textContent = msg;
-    setTimeout(() => { errorFeedback.textContent = ''; }, 5000);
+
+  const showError = (target: HTMLElement, message: string) => {
+    target.textContent = message;
   };
-  
+
+  const clearError = (target: HTMLElement) => {
+    target.textContent = '';
+  };
+
   const renderManageList = () => {
-    manageList.innerHTML = '';
+    manageList.replaceChildren();
+
     currentItems.forEach((item, index) => {
-      const li = document.createElement('li');
-      li.style.marginBottom = '10px';
-      li.style.padding = '10px';
-      li.style.border = '1px solid #ddd';
-      li.style.display = 'flex';
-      li.style.justifyContent = 'space-between';
-      li.style.alignItems = 'center';
-      
+      const listItem = document.createElement('li');
+      listItem.style.marginBottom = '10px';
+      listItem.style.padding = '10px';
+      listItem.style.border = '1px solid #ddd';
+      listItem.style.display = 'flex';
+      listItem.style.justifyContent = 'space-between';
+      listItem.style.alignItems = 'center';
+
       const info = document.createElement('span');
-      info.textContent = `${item.label} (${item.enabled ? 'Enabled' : 'Disabled'}) - Sort: ${item.sortKey}`;
+      info.textContent = `${item.label} (${item.enabled ? 'Enabled' : 'Disabled'})`;
       if (!item.enabled) {
-        info.style.color = '#999';
+        info.style.color = '#666';
         info.style.textDecoration = 'line-through';
       }
-      li.appendChild(info);
-      
+      listItem.appendChild(info);
+
       const controls = document.createElement('div');
-      
-      const btnUp = document.createElement('button');
-      btnUp.textContent = '↑';
-      btnUp.disabled = index === 0;
-      btnUp.onclick = async () => {
+      const addControl = (label: string, action: () => void | Promise<void>) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = label;
+        button.style.marginLeft = '8px';
+        button.addEventListener('click', () => void action());
+        controls.appendChild(button);
+        return button;
+      };
+
+      const moveUp = addControl('↑', async () => {
         if (!currentUser || index === 0) return;
-        const prevItem = currentItems[index - 1];
         try {
-          const newSortKey = (parseInt(prevItem.sortKey, 10) - 10).toString();
-          await updateLauncherItem(currentUser.uid, item.itemId, { sortKey: newSortKey });
-        } catch(e) {
-          showError('Failed to move up');
+          await swapLauncherItemSortKeys(
+            currentUser.uid,
+            item,
+            currentItems[index - 1],
+          );
+        } catch (error) {
+          showError(errorFeedback, `Failed to move item: ${errorMessage(error)}`);
         }
-      };
-      
-      const btnDown = document.createElement('button');
-      btnDown.textContent = '↓';
-      btnDown.disabled = index === currentItems.length - 1;
-      btnDown.onclick = async () => {
+      });
+      moveUp.disabled = index === 0;
+
+      const moveDown = addControl('↓', async () => {
         if (!currentUser || index === currentItems.length - 1) return;
-        const nextItem = currentItems[index + 1];
         try {
-          const newSortKey = (parseInt(nextItem.sortKey, 10) + 10).toString();
-          await updateLauncherItem(currentUser.uid, item.itemId, { sortKey: newSortKey });
-        } catch(e) {
-          showError('Failed to move down');
+          await swapLauncherItemSortKeys(
+            currentUser.uid,
+            item,
+            currentItems[index + 1],
+          );
+        } catch (error) {
+          showError(errorFeedback, `Failed to move item: ${errorMessage(error)}`);
         }
-      };
-      
-      const btnToggle = document.createElement('button');
-      btnToggle.textContent = item.enabled ? 'Disable' : 'Enable';
-      btnToggle.style.marginLeft = '10px';
-      btnToggle.onclick = async () => {
+      });
+      moveDown.disabled = index === currentItems.length - 1;
+
+      addControl(item.enabled ? 'Disable' : 'Enable', async () => {
         if (!currentUser) return;
         try {
-          await updateLauncherItem(currentUser.uid, item.itemId, { enabled: !item.enabled });
-        } catch (e) {
-          showError('Failed to toggle status');
+          await updateLauncherItem(currentUser.uid, item.itemId, {
+            enabled: !item.enabled,
+          });
+        } catch (error) {
+          showError(errorFeedback, `Failed to update item: ${errorMessage(error)}`);
         }
-      };
-      
-      const btnEdit = document.createElement('button');
-      btnEdit.textContent = 'Edit';
-      btnEdit.style.marginLeft = '10px';
-      btnEdit.onclick = () => {
+      });
+
+      addControl('Edit', () => {
         formTitle.textContent = 'Edit Item';
         formItemId.value = item.itemId;
         formLabel.value = item.label;
@@ -183,75 +205,119 @@ export function renderAppPage(): HTMLElement {
         formFg.value = item.icon.foreground;
         formIconType.value = item.icon.type;
         formEnabled.checked = item.enabled;
-        formSortKey.value = item.sortKey;
         formContainer.style.display = 'block';
-        formContainer.scrollIntoView({ behavior: 'smooth' });
-      };
-      
-      const btnDelete = document.createElement('button');
-      btnDelete.textContent = 'Delete';
-      btnDelete.style.marginLeft = '10px';
-      btnDelete.style.color = 'red';
-      btnDelete.onclick = async () => {
-        if (!currentUser) return;
-        if (confirm(`Are you sure you want to delete "${item.label}"?`)) {
-          try {
-            await deleteLauncherItem(currentUser.uid, item.itemId);
-          } catch(e) {
-            showError('Failed to delete item');
-          }
+        formLabel.focus();
+      });
+
+      const deleteButton = addControl('Delete', async () => {
+        if (!currentUser || !window.confirm(`Delete “${item.label}”?`)) return;
+        try {
+          await deleteLauncherItem(currentUser.uid, item.itemId);
+        } catch (error) {
+          showError(errorFeedback, `Failed to delete item: ${errorMessage(error)}`);
         }
-      };
-      
-      controls.appendChild(btnUp);
-      controls.appendChild(btnDown);
-      controls.appendChild(btnToggle);
-      controls.appendChild(btnEdit);
-      controls.appendChild(btnDelete);
-      li.appendChild(controls);
-      manageList.appendChild(li);
+      });
+      deleteButton.style.color = '#b00020';
+
+      listItem.appendChild(controls);
+      manageList.appendChild(listItem);
     });
   };
-  
+
   const updateGrid = () => {
-    gridContainer.innerHTML = '';
-    if (currentItems.length === 0) {
-      emptyState.style.display = 'block';
-    } else {
-      emptyState.style.display = 'none';
+    gridContainer.replaceChildren();
+    emptyState.style.display = currentItems.length === 0 ? 'block' : 'none';
+    if (currentItems.length > 0) {
       gridContainer.appendChild(renderLauncherGrid(currentItems));
     }
     renderManageList();
   };
-  
-  setupAuthListener((user) => {
+
+  const renderSignedOut = () => {
+    appContentEl.style.display = 'none';
+    authStateEl.replaceChildren();
+
+    const choices = document.createElement('div');
+    choices.style.display = 'flex';
+    choices.style.flexDirection = 'column';
+    choices.style.gap = '10px';
+    choices.style.maxWidth = '300px';
+
+    const googleButton = document.createElement('button');
+    googleButton.type = 'button';
+    googleButton.textContent = 'Continue with Google';
+    googleButton.addEventListener('click', async () => {
+      clearError(authErrorFeedback);
+      try {
+        await loginWithGoogle();
+      } catch (error) {
+        showError(authErrorFeedback, `Google sign-in failed: ${errorMessage(error)}`);
+      }
+    });
+
+    const anonymousButton = document.createElement('button');
+    anonymousButton.type = 'button';
+    anonymousButton.textContent = 'Continue anonymously';
+    anonymousButton.addEventListener('click', async () => {
+      clearError(authErrorFeedback);
+      try {
+        await loginAnonymously();
+      } catch (error) {
+        showError(authErrorFeedback, `Anonymous sign-in failed: ${errorMessage(error)}`);
+      }
+    });
+
+    choices.append(googleButton, anonymousButton);
+    authStateEl.appendChild(choices);
+  };
+
+  const unsubscribeAuth = setupAuthListener((user) => {
     currentUser = user;
-    if (user) {
-      createOrUpdateProfile(user);
-      authStateEl.innerHTML = `<p>Signed in as ${user.isAnonymous ? 'Anonymous User' : user.displayName || user.email}</p>`;
-      appContentEl.style.display = 'block';
-      
-      if (unsubscribeItems) unsubscribeItems();
-      unsubscribeItems = subscribeToLauncherItems(user.uid, (items) => {
+    unsubscribeItems?.();
+    unsubscribeItems = null;
+    currentItems = [];
+    updateGrid();
+    clearError(authErrorFeedback);
+
+    if (!user) {
+      renderSignedOut();
+      return;
+    }
+
+    authStateEl.replaceChildren();
+    const identity = document.createElement('p');
+    const displayIdentity = user.isAnonymous
+      ? 'Anonymous User'
+      : user.displayName || user.email || 'Google User';
+    identity.textContent = `Signed in as ${displayIdentity}`;
+    authStateEl.appendChild(identity);
+    appContentEl.style.display = 'block';
+
+    void createOrUpdateProfile(user).catch((error) => {
+      showError(errorFeedback, `Profile update failed: ${errorMessage(error)}`);
+    });
+
+    unsubscribeItems = subscribeToLauncherItems(
+      user.uid,
+      (items) => {
         currentItems = items;
         updateGrid();
-      });
-    } else {
-      appContentEl.style.display = 'none';
-      if (unsubscribeItems) unsubscribeItems();
-      authStateEl.innerHTML = `
-        <div style="display: flex; flex-direction: column; gap: 10px; max-width: 300px;">
-          <button id="btn-login-google" style="padding: 10px;">Continue with Google</button>
-          <button id="btn-login-anon" style="padding: 10px;">Continue anonymously</button>
-        </div>
-      `;
-      authStateEl.querySelector('#btn-login-google')?.addEventListener('click', loginWithGoogle);
-      authStateEl.querySelector('#btn-login-anon')?.addEventListener('click', loginAnonymously);
+      },
+      (error) => {
+        showError(errorFeedback, `Unable to load launcher items: ${error.message}`);
+      },
+    );
+  });
+
+  container.querySelector('#btn-signout')?.addEventListener('click', async () => {
+    clearError(errorFeedback);
+    try {
+      await logoutUser();
+    } catch (error) {
+      showError(errorFeedback, `Sign-out failed: ${errorMessage(error)}`);
     }
   });
-  
-  container.querySelector('#btn-signout')?.addEventListener('click', logoutUser);
-  
+
   container.querySelector('#btn-create')?.addEventListener('click', () => {
     formTitle.textContent = 'Create Item';
     formItemId.value = '';
@@ -261,72 +327,77 @@ export function renderAppPage(): HTMLElement {
     formFg.value = '#ffffff';
     formIconType.value = 'generic-web';
     formEnabled.checked = true;
-    
-    // Auto increment sort key based on last item
-    const lastSortKey = currentItems.length > 0 ? parseInt(currentItems[currentItems.length - 1].sortKey, 10) : 0;
-    formSortKey.value = (lastSortKey ? lastSortKey + 1000 : 1000).toString();
-    
     formContainer.style.display = 'block';
+    formLabel.focus();
   });
-  
+
   container.querySelector('#btn-cancel')?.addEventListener('click', () => {
     formContainer.style.display = 'none';
   });
-  
+
   container.querySelector('#btn-save')?.addEventListener('click', async () => {
     if (!currentUser) return;
-    
+    clearError(errorFeedback);
+
     const label = formLabel.value.trim();
-    let urlStr = formUrl.value.trim();
-    if (!urlStr.startsWith('https://')) {
-      showError('URL must start with https://');
+    const url = formUrl.value.trim();
+    const foreground = formFg.value.toLowerCase();
+    const background = formBg.value.toLowerCase();
+    const iconType = formIconType.value;
+
+    if (label.length === 0 || label.length > 100) {
+      showError(errorFeedback, 'Label must contain between 1 and 100 characters.');
       return;
     }
-    
-    // validate url syntax
-    try {
-      new URL(urlStr);
-    } catch(e) {
-      showError('Invalid URL format');
+    if (url.length > 2048 || !isValidHttpsUrl(url)) {
+      showError(errorFeedback, 'Enter a valid HTTPS URL of at most 2048 characters.');
       return;
     }
-    
-    const fg = formFg.value.trim();
-    const bg = formBg.value.trim();
-    const hexRegex = /^#[0-9a-fA-F]{6}$/;
-    if (!hexRegex.test(fg) || !hexRegex.test(bg)) {
-      showError('Colors must be 6-digit hex codes e.g. #ffffff');
+    if (!/^#[0-9a-f]{6}$/.test(foreground) || !/^#[0-9a-f]{6}$/.test(background)) {
+      showError(errorFeedback, 'Colors must be lowercase six-digit hexadecimal values.');
       return;
     }
-    
-    const itemData = {
+    if (!isIconType(iconType)) {
+      showError(errorFeedback, 'Select a supported icon type.');
+      return;
+    }
+
+    const editableFields = {
       label,
-      url: urlStr,
+      url,
       icon: {
-        type: formIconType.value,
-        foreground: fg,
-        background: bg
+        type: iconType,
+        foreground,
+        background,
       },
-      sortKey: formSortKey.value || '1000',
       openMode: 'new-tab' as const,
       enabled: formEnabled.checked,
-      schemaVersion: 1,
     };
-    
+
     try {
       if (formItemId.value) {
-        await updateLauncherItem(currentUser.uid, formItemId.value, itemData);
+        await updateLauncherItem(currentUser.uid, formItemId.value, editableFields);
       } else {
-        await addLauncherItem(currentUser.uid, itemData);
+        await addLauncherItem(currentUser.uid, {
+          ...editableFields,
+          sortKey: nextSortKey(currentItems.map((item) => item.sortKey)),
+        });
       }
       formContainer.style.display = 'none';
-    } catch(e: any) {
-      showError('Failed to save item: ' + (e.message || String(e)));
+    } catch (error) {
+      showError(errorFeedback, `Failed to save item: ${errorMessage(error)}`);
     }
   });
 
-  // Cleanup on dismount (in a real framework, we'd hook into unmount)
-  // For this vanilla JS router, we just let it leak or we'd need to add a cleanup hook to the router.
-  
+  container.addEventListener(
+    'launcher:cleanup',
+    () => {
+      unsubscribeAuth();
+      unsubscribeItems?.();
+      unsubscribeItems = null;
+    },
+    { once: true },
+  );
+
   return container;
 }
