@@ -3,179 +3,54 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="description" content="二部グラフの両側を別画面のトーラスグリッドへ配置し、画面遷移時の近接性を最適化するアルゴリズムの説明。">
-  <title>二部グラフのトーラスグリッド可視化 | launcher-aistudio</title>
+  <meta name="description" content="二部グラフを別画面のグリッドへ配置するアルゴリズムの解説と対話型デモ。">
+  <title>二部グラフ可視化研究ノート | launcher-aistudio</title>
   <link rel="stylesheet" href="assets/site.css">
 </head>
 <body>
-<header class="site-header">
-  <div class="header-inner">
-    <a class="brand" href="./"><span class="brand-mark">LA</span><span>launcher-aistudio / developer notes</span></a>
-    <nav aria-label="ページ内ナビゲーション">
-      <a href="#problem">問題設定</a>
-      <a href="#model">数理モデル</a>
-      <a href="#algorithm">アルゴリズム</a>
-      <a href="#implementation">実装モデル</a>
-    </nav>
-  </div>
-</header>
-
+<header class="site-header"><div class="header-inner">
+  <a class="brand" href="./"><span class="brand-mark">LA</span><span>launcher-aistudio / developer notes</span></a>
+  <nav aria-label="主要ナビゲーション"><a href="#overview">概要</a><a href="#demos">デモ</a><a href="algorithm.html">アルゴリズム詳説</a></nav>
+</div></header>
 <main>
   <section class="hero">
     <div>
       <p class="eyebrow">Bipartite graph layout research prototype</p>
       <h1>二つの画面をまたぐ<br>二部グラフの空間配置</h1>
-      <p class="lead">集合Aと集合Bを別々のグリッド画面に表示し、ある要素を選択して反対側へ遷移したとき、その隣接要素が元の選択位置の近くに現れるように、両側の配置を同時に最適化します。</p>
-      <div class="actions">
-        <a class="button primary" href="#model">数理モデルを読む</a>
-        <a class="button" href="#algorithm">最適化手順を見る</a>
-      </div>
+      <p class="lead">集合Aと集合Bを別々のグリッド画面に表示し、要素を選択して反対側へ遷移したとき、その隣接要素が元の選択位置の近くに現れるように、両側の配置を同時に最適化します。</p>
+      <div class="actions"><a class="button primary" href="#demos">デモを試す</a><a class="button" href="algorithm.html">アルゴリズムを読む</a></div>
     </div>
-    <aside class="hero-card" aria-label="配置概念図">
-      <div class="mini-grid" aria-hidden="true">
-        <span></span><span></span><span></span><span></span><span></span><span></span><span></span>
-        <span></span><span></span><span></span><span></span><span></span><span></span><span></span>
-        <span></span><span></span><span></span><span></span><span></span><span></span><span></span>
-        <span></span><span></span><span></span><span></span><span></span><span></span><span></span>
-        <span></span><span></span><span></span><span></span><span></span><span></span><span></span>
-        <span></span><span></span><span></span><span></span><span></span><span></span><span></span>
-        <span></span><span></span><span></span><span></span><span></span><span></span><span></span>
-      </div>
-      <p>選択した頂点の位置を、反対側の隣接頂点群に対する空間的な参照点として用います。</p>
-    </aside>
+    <aside class="hero-card" aria-label="配置概念図"><div class="mini-grid" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div><p>同じ画面座標を両集合で共有し、辺で結ばれた頂点同士の位置的不一致を目的関数として最小化します。</p></aside>
   </section>
 
-  <section id="problem">
-    <p class="eyebrow">Problem</p>
-    <h2>問題設定</h2>
-    <p class="section-intro">二部グラフ G = (A ∪ B, E) を対象とします。画面には一度に集合Aまたは集合Bの一方だけが表示され、両画面は同じ論理座標系を共有します。</p>
+  <section id="overview">
+    <p class="eyebrow">Overview</p><h2>段階的に変更した三つのモデル</h2>
+    <p class="section-intro">この会話では、最初の平面グリッドから、周期境界を持つトーラス、さらにマンハッタン距離と可変指数を用いるモデルへ段階的に拡張しました。</p>
     <div class="cards">
-      <article class="card">
-        <span class="step-number">A</span>
-        <h3>集合Aの画面</h3>
-        <p>頂点 a をタップすると集合Bへ切り替わります。a と辺で接続された頂点を、a が表示されていた論理座標の周辺へ集めます。</p>
-      </article>
-      <article class="card">
-        <span class="step-number">B</span>
-        <h3>集合Bの画面</h3>
-        <p>逆方向も同一です。頂点 b の隣接頂点を、集合A側で同じ位置の周辺へ配置します。</p>
-      </article>
-      <article class="card">
-        <span class="step-number">T</span>
-        <h3>トーラスグリッド</h3>
-        <p>左右端、上下端を接合します。周期境界をまたぐ近接関係は、ユーザーが明示的にスクロールして確認します。</p>
-      </article>
+      <article class="card"><span class="step-number">1</span><h3>平面グリッド</h3><p>通常の矩形グリッドとユークリッド距離二乗を使用します。基本的な交互割当と画面切替を確認する基準モデルです。</p></article>
+      <article class="card"><span class="step-number">2</span><h3>トーラスグリッド</h3><p>左右端と上下端を接合し、周期境界をまたぐ最短距離を使用します。表示は周期複製をスクロールします。</p></article>
+      <article class="card"><span class="step-number">3</span><h3>マンハッタン距離</h3><p>上下左右のマス数を距離とし、コスト d<sub>M</sub><sup>p</sup> の指数 p を1.0から2.0まで変更して比較します。</p></article>
     </div>
   </section>
 
-  <section id="model">
-    <p class="eyebrow">Mathematical model</p>
-    <h2>トーラス上のマンハッタン距離</h2>
-    <p class="section-intro">横幅 W、高さ H のグリッドを Z<sub>W</sub> × Z<sub>H</sub> とみなし、各軸で周期境界を考慮した最短差を求めます。</p>
-    <div class="formula">
-      <span class="math">δ<sub>x</sub> = min(|x₁ − x₂|, W − |x₁ − x₂|),　δ<sub>y</sub> = min(|y₁ − y₂|, H − |y₁ − y₂|)</span>
-    </div>
-    <div class="formula">
-      <span class="math">d<sub>M</sub>(p, q) = δ<sub>x</sub> + δ<sub>y</sub></span>
-      <small>上下左右の1マス移動を1距離単位とするため、斜め位置は2、横1・縦2の位置は3になります。</small>
-    </div>
-    <p>配置最適化では、生の距離に指数 p を適用したコストも扱います。</p>
-    <div class="formula">
-      <span class="math">L<sub>p</sub>(x, y) = Σ<sub>(a,b)∈E</sub> w<sub>ab</sub> · d<sub>M</sub>(x(a), y(b))<sup>p</sup>,　1.0 ≤ p ≤ 2.0</span>
-      <small>p = 1.0 は総移動マス数を直接評価し、p を大きくすると遠距離の辺をより強く罰します。</small>
-    </div>
-    <div class="two-column">
-      <div>
-        <h3>指数を変える意味</h3>
-        <ul class="clean">
-          <li><strong>p = 1.0:</strong> 平均的な距離の短縮を優先します。</li>
-          <li><strong>1.0 &lt; p &lt; 2.0:</strong> 平均距離と長距離辺の抑制を連続的に調整します。</li>
-          <li><strong>p = 2.0:</strong> 少数の長距離辺に大きなペナルティを与えます。</li>
-        </ul>
-      </div>
-      <div class="note">指数を変更すると目的関数自体が変わるため、表示上の数値を再計算するだけではなく、同じグラフに対して配置を再最適化します。</div>
-    </div>
-  </section>
-
-  <section id="algorithm">
-    <p class="eyebrow">Optimization</p>
-    <h2>交互割当による最適化</h2>
-    <p class="section-intro">通常の算術重心は、周期境界およびマンハッタン距離に対して直接利用しません。各頂点を各候補セルへ配置した場合のコストを総当たりで計算し、線形割当問題として解きます。</p>
+  <section id="demos">
+    <p class="eyebrow">Interactive demonstrations</p><h2>対話型デモ</h2>
+    <p class="section-intro">各ページはHTML、CSS、JavaScriptを単一ファイルに収めています。乱数シード、平均次数、反復回数などを変更し、同じグラフに対する配置の差を比較できます。</p>
     <div class="cards">
-      <article class="card">
-        <span class="step-number">1</span>
-        <h3>集合Bを固定</h3>
-        <p>各 a ∈ A と各セル s に対して、a の全隣接頂点までの重み付き d<sub>M</sub><sup>p</sup> の和 C<sup>A</sup><sub>a,s</sub> を計算します。</p>
-      </article>
-      <article class="card">
-        <span class="step-number">2</span>
-        <h3>集合Aを割当</h3>
-        <p>コスト行列 C<sup>A</sup> に Hungarian algorithm を適用し、100頂点を100セルへ重複なく配置します。</p>
-      </article>
-      <article class="card">
-        <span class="step-number">3</span>
-        <h3>方向を反転</h3>
-        <p>集合Aを固定して集合Bを同様に割り当て、目的関数が改善しなくなるまで交互に反復します。</p>
-      </article>
+      <article class="card demo-card"><span class="badge">Baseline</span><h3>平面グリッド・ユークリッド距離</h3><p>10×10の平面グリッドを使う最初のモデルです。タップした頂点の隣接頂点を反対側で強調します。</p><div class="actions"><a class="button primary" href="demos/planar-euclidean.html">デモを開く</a></div></article>
+      <article class="card demo-card"><span class="badge">Toroidal</span><h3>トーラス・ユークリッド距離</h3><p>周期境界付きユークリッド距離を採用し、3×3周期コピーを上下左右へスクロールできます。</p><div class="actions"><a class="button primary" href="demos/torus-euclidean.html">デモを開く</a></div></article>
+      <article class="card demo-card"><span class="badge">Recommended experiment</span><h3>トーラス・マンハッタン距離・指数可変</h3><p>距離指数 p を1.0、1.1、…、2.0に変更し、各指数で再最適化して距離分布と目的関数を比較します。</p><div class="actions"><a class="button primary" href="demos/torus-manhattan-exponent.html">デモを開く</a></div></article>
     </div>
-    <div class="formula">
-      <span class="math">C<sup>A</sup><sub>a,s</sub> = Σ<sub>b∈N(a)</sub> w<sub>ab</sub> · d<sub>M</sub>(s, y(b))<sup>p</sup></span>
-    </div>
+    <div class="actions"><a class="button" href="demos/">デモ一覧ページ</a></div>
+  </section>
+
+  <section>
+    <p class="eyebrow">Documentation</p><h2>アルゴリズムの詳細</h2>
     <div class="two-column">
-      <div>
-        <h3>辺重み</h3>
-        <p>高次数頂点だけが目的関数を支配しないよう、各頂点をタップしたときの平均隣接距離に対応する次数正規化重みを利用できます。</p>
-      </div>
-      <div>
-        <h3>収束と局所解</h3>
-        <p>片側を固定した各更新は割当問題の厳密解なので、目的関数は増加しません。ただし全体は非凸であり、最終結果は初期配置に依存します。</p>
-      </div>
-    </div>
-  </section>
-
-  <section id="implementation">
-    <p class="eyebrow">Interface model</p>
-    <h2>周期表示とスクロール</h2>
-    <div class="two-column">
-      <div>
-        <p>論理的には10×10の100セルですが、表示時には同じ配置を上下左右へ周期的に複製します。ユーザーは周期平面をスクロールし、境界の反対側にある近傍を自分で表示領域へ移動します。</p>
-        <ul class="clean">
-          <li>集合Aと集合Bは共通のスクロール座標を保持します。</li>
-          <li>画面切替時に自動センタリングしません。</li>
-          <li>周期複製をタップしても同じ論理頂点を選択します。</li>
-          <li>選択位置と隣接頂点を反対側画面で強調します。</li>
-        </ul>
-      </div>
-      <table class="metric-table" aria-label="デモで表示する評価指標">
-        <tbody>
-          <tr><th>平均 d<sub>M</sub></th><td>指数を掛ける前の平均マス数</td></tr>
-          <tr><th>平均 d<sub>M</sub><sup>p</sup></th><td>最適化対象の重み付きコスト</td></tr>
-          <tr><th>最大距離</th><td>最も遠い辺のマンハッタン距離</td></tr>
-          <tr><th>距離分布</th><td>各距離を持つ辺の本数</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </section>
-
-  <section id="roadmap">
-    <p class="eyebrow">Roadmap</p>
-    <h2>次の実装段階</h2>
-    <p class="section-intro">この初版ではアルゴリズムの問題設定と数理的な基礎を固定します。次の更新で、100 × 100頂点、指数1.0〜2.0、周期スクロールを備えた対話型デモを <code>/docs/demos/</code> に追加します。</p>
-  </section>
-
-  <section id="limits">
-    <p class="eyebrow">Limitations</p>
-    <h2>解釈上の注意</h2>
-    <div class="cards">
-      <article class="card"><h3>完全な近接性は保証できない</h3><p>完全二部グラフや高密度グラフでは、すべてのタップについて全隣接頂点を近傍へ配置することは不可能です。</p></article>
-      <article class="card"><h3>トーラス距離と見かけの距離</h3><p>周期境界をまたぐ二要素は数学的には近くても、現在の矩形ビューポートでは離れて見えることがあります。</p></article>
-      <article class="card"><h3>指数は設計上の選好</h3><p>大きな指数が常に優れているわけではありません。平均性能と最悪距離のどちらを重視するかによって選択します。</p></article>
+      <div><p>詳細ドキュメントでは、二部グラフ、グリッド配置、辺重み、平面距離、トーラス距離、マンハッタン距離、指数付き目的関数、Hungarian algorithmによる交互最適化を順に定義します。</p><div class="actions"><a class="button primary" href="algorithm.html">詳細ドキュメントを読む</a></div></div>
+      <div class="formula"><span class="math">L<sub>p</sub>(x,y) = Σ<sub>(a,b)∈E</sub> w<sub>ab</sub> d(x(a),y(b))<sup>p</sup></span><small>辺で接続された頂点間の距離コストを小さくする一方、各集合内では一つのセルに一頂点だけを割り当てます。</small></div>
     </div>
   </section>
 </main>
-
-<footer>
-  <div class="footer-inner">launcher-aistudio developer site — static GitHub Pages source under <code>/docs</code>.</div>
-</footer>
-</body>
-</html>
+<footer><div class="footer-inner">launcher-aistudio developer site — GitHub Pages source under <code>launcher-aistudio:/docs</code>.</div></footer>
+</body></html>

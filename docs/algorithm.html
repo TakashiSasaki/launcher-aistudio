@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="二部グラフを二つのグリッド画面へ配置する交互割当アルゴリズムの詳細。">
+  <title>二部グラフ配置アルゴリズム詳説 | launcher-aistudio</title>
+  <link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+<header class="site-header"><div class="header-inner"><a class="brand" href="./"><span class="brand-mark">LA</span><span>launcher-aistudio / developer notes</span></a><nav><a href="./">トップ</a><a href="#objective">目的関数</a><a href="#optimization">最適化</a><a href="#implementation">実装</a></nav></div></header>
+<main>
+<p class="breadcrumb"><a href="./">トップ</a> / アルゴリズム詳説</p>
+<section class="hero"><div><p class="eyebrow">Algorithm documentation</p><h1>二部グラフの<br>二画面グリッド配置</h1><p class="lead">一方の集合の頂点をタップしてもう一方の集合へ切り替えたとき、隣接頂点がタップ位置の近くに現れるように、二つの配置を同時に最適化する問題を定式化します。</p></div><aside class="hero-card"><h3>対象</h3><ul class="clean"><li>二部グラフ G=(A∪B,E)</li><li>AとBを別々の画面に表示</li><li>各画面は有限グリッド</li><li>各頂点は一意のセルを占有</li><li>両画面は同じ論理座標系を共有</li></ul></aside></section>
+
+<section><div class="toc"><strong>目次</strong><ol><li><a href="#problem">問題設定</a></li><li><a href="#coordinates">配置と座標</a></li><li><a href="#weights">辺重み</a></li><li><a href="#distance">距離モデル</a></li><li><a href="#objective">目的関数</a></li><li><a href="#optimization">交互割当</a></li><li><a href="#hungarian">線形割当</a></li><li><a href="#convergence">収束</a></li><li><a href="#initialization">初期化</a></li><li><a href="#implementation">実装</a></li><li><a href="#complexity">計算量</a></li><li><a href="#limitations">限界</a></li></ol></div></section>
+
+<section id="problem"><p class="eyebrow">1. Problem</p><h2>問題設定</h2><p>二部グラフを G=(A∪B,E) とします。AとBの頂点数はデモではそれぞれ100です。画面には一度に一方の集合だけを表示します。</p><div class="cards"><article class="card"><span class="step-number">A</span><h3>AからBへの遷移</h3><p>a∈AをタップするとB画面へ切り替わり、N(a)={b∈B|(a,b)∈E} が元のタップ位置付近に現れることを目標とします。</p></article><article class="card"><span class="step-number">B</span><h3>BからAへの遷移</h3><p>b∈Bをタップした場合も対称に、N(b)に属するA頂点が元のタップ位置付近に現れることを目標とします。</p></article><article class="card"><span class="step-number">C</span><h3>競合</h3><p>複数頂点が同じ理想位置を要求しても、同じ画面内ではセルを共有できません。そのため全体として一対一割当を解きます。</p></article></div></section>
+
+<section id="coordinates"><p class="eyebrow">2. Coordinates</p><h2>配置と共有座標</h2><p>A画面のセル集合をP<sub>A</sub>、B画面のセル集合をP<sub>B</sub>とし、配置をx:A→P<sub>A</sub>、y:B→P<sub>B</sub>とします。各写像は単射です。10×10で100頂点なら全単射になります。</p><div class="formula"><span class="math">x(a)=(x<sub>a</sub>,y<sub>a</sub>),　y(b)=(x<sub>b</sub>,y<sub>b</sub>)</span><small>AとBは異なる画面なので、x(a)=y(b)は許されます。同じ座標であることが、遷移前後の画面位置が一致することを意味します。</small></div></section>
+
+<section id="weights"><p class="eyebrow">3. Edge weights</p><h2>次数による偏りを抑える辺重み</h2><p>全辺を同じ重みで評価すると、高次数頂点が目的関数を強く支配します。各頂点を同程度の頻度でタップすると仮定する場合、各タップにおける平均隣接距離を評価する重みが自然です。</p><div class="formula"><span class="math">w<sub>ab</sub> = λ p<sub>a</sub>/deg(a) + (1−λ) q<sub>b</sub>/deg(b)</span><small>p<sub>a</sub>とq<sub>b</sub>はタップ確率、λは二方向の重要度です。情報がなければ一様確率とλ=1/2を利用できます。</small></div><div class="note">孤立頂点は距離制約を持ちません。ID順、属性順、前回位置からの移動量など、別の規則で配置する必要があります。</div></section>
+
+<section id="distance"><p class="eyebrow">4. Distance models</p><h2>三つの距離モデル</h2><div class="cards"><article class="card"><h3>平面ユークリッド距離</h3><p>d²=(Δx)²+(Δy)²。最初のデモで使用し、通常の重心による簡略化が可能です。</p></article><article class="card"><h3>トーラス・ユークリッド距離</h3><p>各軸の差を周期境界をまたぐ最短差へ置き換えます。右端と左端、上端と下端が隣接します。</p></article><article class="card"><h3>トーラス・マンハッタン距離</h3><p>d<sub>M</sub>=δ<sub>x</sub>+δ<sub>y</sub>。上下左右の一マス移動を1とし、斜め位置は2です。</p></article></div>
+<div class="formula"><span class="math">δ<sub>x</sub>=min(|x₁−x₂|, W−|x₁−x₂|),　δ<sub>y</sub>=min(|y₁−y₂|, H−|y₁−y₂|)</span></div>
+<div class="formula"><span class="math">d<sub>T,2</sub>²=δ<sub>x</sub>²+δ<sub>y</sub>²,　d<sub>T,1</sub>=δ<sub>x</sub>+δ<sub>y</sub></span></div>
+<p>マンハッタン距離は、表示グリッドを上下左右の辺で接続したグラフとみなしたときの最短経路長です。10×10トーラスでは最大距離は10です。</p></section>
+
+<section id="objective"><p class="eyebrow">5. Objective</p><h2>指数付き目的関数</h2><div class="formula"><span class="math">L<sub>p</sub>(x,y)=Σ<sub>(a,b)∈E</sub>w<sub>ab</sub>d(x(a),y(b))<sup>p</sup></span><small>デモではpを1.0から2.0まで0.1刻みで変更できます。</small></div><div class="two-column"><div><h3>p=1</h3><p>総距離を直接最小化します。多数の辺の平均的な改善を重視し、少数の長距離辺に対するペナルティは比較的弱い設定です。</p></div><div><h3>p&gt;1</h3><p>凸増加するコストとなり、遠距離の辺を相対的に強く罰します。p=2では距離2、3、4のコストは4、9、16です。</p></div></div><div class="note">異なる指数の目的関数値をそのまま大小比較することには注意が必要です。指数ごとの配置比較では、生の平均距離、最大距離、距離分布も併記します。</div></section>
+
+<section id="optimization"><p class="eyebrow">6. Optimization</p><h2>片側を固定した交互最適化</h2><p>両配置を同時に最適化すると組合せ数が極めて大きくなります。一方を固定すると、他方の各頂点を各セルへ置くコストが計算でき、線形割当問題になります。</p>
+<div class="algorithm-step"><div class="number">1</div><div><h3>初期配置を用意</h3><p>AとBの100頂点を、それぞれ100セルへランダムまたはスペクトル的に一対一配置します。</p></div></div>
+<div class="algorithm-step"><div class="number">2</div><div><h3>Bを固定してAのコスト行列を作る</h3><div class="formula"><span class="math">C<sup>A</sup><sub>a,s</sub>=Σ<sub>b∈N(a)</sub>w<sub>ab</sub>d(s,y(b))<sup>p</sup></span></div></div></div>
+<div class="algorithm-step"><div class="number">3</div><div><h3>Aを一対一割当</h3><p>C<sup>A</sup>をHungarian algorithmへ渡し、Aの全頂点をセルへ重複なく割り当てます。</p></div></div>
+<div class="algorithm-step"><div class="number">4</div><div><h3>Aを固定してBを更新</h3><div class="formula"><span class="math">C<sup>B</sup><sub>b,s</sub>=Σ<sub>a∈N(b)</sub>w<sub>ab</sub>d(s,x(a))<sup>p</sup></span></div></div></div>
+<div class="algorithm-step"><div class="number">5</div><div><h3>反復</h3><p>目的関数が改善しなくなるか、指定反復回数へ達するまでA更新とB更新を交互に行います。</p></div></div>
+<pre><code>positionsA, positionsB = initial_assignment()
+repeat:
+    costA[a][cell] = sum(weight(a,b) * distance(cell, positionsB[b]) ** p)
+    candidateA = hungarian(costA)
+
+    costB[b][cell] = sum(weight(a,b) * distance(cell, candidateA[a]) ** p)
+    candidateB = hungarian(costB)
+
+    accept candidateA, candidateB only when the objective improves</code></pre></section>
+
+<section id="hungarian"><p class="eyebrow">7. Assignment</p><h2>Hungarian algorithmを使う理由</h2><p>各頂点には100個の候補セルがありますが、一つのセルは一頂点だけに割り当てられます。各頂点が独立に最小コストセルを選ぶと衝突するため、全体のコスト和を最小化する完全マッチングが必要です。</p><div class="table-wrap"><table><thead><tr><th>項目</th><th>意味</th></tr></thead><tbody><tr><td>行</td><td>配置する側の頂点</td></tr><tr><td>列</td><td>候補グリッドセル</td></tr><tr><td>要素 C[i][j]</td><td>頂点iをセルjへ置いた場合の隣接距離コスト</td></tr><tr><td>解</td><td>行と列を重複なく対応させる最小コスト割当</td></tr></tbody></table></div><p>100×100の割当では、典型的な計算量O(100³)はブラウザ上でも実用的です。</p></section>
+
+<section id="convergence"><p class="eyebrow">8. Convergence</p><h2>単調改善と局所最適</h2><p>片側を固定した更新は、その側についての最適な割当を求めるため、受理条件を正しく実装すれば目的関数は増加しません。ただし二つの側を合わせた問題は非凸であり、大域的最適解は保証されません。</p><div class="cards"><article class="card"><h3>同率解</h3><p>トーラスの平行移動対称性などにより、同じコストを持つ配置が多数存在します。ID順タイブレークや前回位置への弱い正則化を利用できます。</p></article><article class="card"><h3>周期</h3><p>同じ値の配置間を往復しないよう、厳密に改善した場合だけ更新するか、過去の配置ハッシュを記録します。</p></article><article class="card"><h3>複数初期値</h3><p>乱数シードや回転・反転した初期配置を複数試し、最終目的関数が最良の結果を採用します。</p></article></div></section>
+
+<section id="initialization"><p class="eyebrow">9. Initialization</p><h2>初期配置</h2><p>デモでは再現性を優先し、シード付き疑似乱数による置換を使用します。より高品質な初期値としては、正規化二部隣接行列の特異値分解を使うスペクトル埋め込みが考えられます。</p><div class="formula"><span class="math">S=D<sub>A</sub><sup>−1/2</sup> M D<sub>B</sub><sup>−1/2</sup>=UΣVᵀ</span><small>非自明な特異ベクトルを二次元座標として用い、その後グリッドセルへの割当を解きます。</small></div></section>
+
+<section id="implementation"><p class="eyebrow">10. Interface implementation</p><h2>トーラス表示とスクロール</h2><p>論理的な配置は10×10ですが、画面には同じ配置を3×3に複製して描画します。中央コピーから周辺コピーへスクロールしたら、見た目を変えずに中央へ座標を戻すことで、周期的なスクロールを実現できます。</p><ul class="clean"><li>A画面とB画面は同じスクロール位置を共有します。</li><li>タップによる画面切替時には自動センタリングしません。</li><li>周期複製は同じ論理頂点IDを参照します。</li><li>境界をまたぐ近傍は、利用者が明示的にスクロールして確認します。</li><li>タップした位置と隣接頂点をCSSクラスで強調します。</li></ul><div class="callout">数学的な距離と現在の矩形ビューポート上の見かけの距離は一致しない場合があります。この設計では、それを自動的に補正せず、トーラスをスクロール可能な空間として利用者へ提示します。</div></section>
+
+<section id="complexity"><p class="eyebrow">11. Complexity</p><h2>計算量</h2><p>n=|A|=|B|、m=|E|、セル数nとします。候補セルごとに隣接辺を走査する素朴なコスト行列生成はO(nm)、Hungarian algorithmはO(n³)です。</p><div class="table-wrap"><table><thead><tr><th>処理</th><th>計算量</th><th>100頂点での目安</th></tr></thead><tbody><tr><td>距離表の事前計算</td><td>O(n²)</td><td>10,000組</td></tr><tr><td>片側コスト行列</td><td>O(nm)</td><td>密グラフでも約100万加算</td></tr><tr><td>片側割当</td><td>O(n³)</td><td>約100万オーダー</td></tr><tr><td>交互反復</td><td>反復数×上記</td><td>数回から十数回</td></tr></tbody></table></div></section>
+
+<section id="limitations"><p class="eyebrow">12. Limitations</p><h2>限界と拡張</h2><div class="cards"><article class="card"><h3>不可能な要求</h3><p>完全二部グラフでは、すべての反対側頂点をすべてのタップ位置の近くへ同時に置くことはできません。得られるのは妥協解です。</p></article><article class="card"><h3>高密度グラフ</h3><p>グラフが密になるほど位置を区別する情報が減ります。カテゴリや時間など外部属性を副目的として追加できます。</p></article><article class="card"><h3>安定性</h3><p>グラフ更新ごとに再配置すると空間記憶が失われます。前回位置からの移動コストを弱く追加する方法があります。</p></article></div><h3>今後の候補</h3><ul class="clean"><li>最大距離または上位分位距離を直接抑える目的関数</li><li>複数初期値とswap局所探索</li><li>共クラスタリングを用いたマルチレベル配置</li><li>頂点属性とグラフ距離の多目的最適化</li><li>Web Workerによる最適化処理の分離</li><li>実際のユーザー操作ログからタップ確率p<sub>a</sub>, q<sub>b</sub>を推定</li></ul></section>
+
+<section><div class="actions"><a class="button primary" href="demos/torus-manhattan-exponent.html">指数可変デモを開く</a><a class="button" href="./">トップへ戻る</a></div></section>
+</main><footer><div class="footer-inner">二部グラフ配置アルゴリズム詳説 — launcher-aistudio</div></footer></body></html>
